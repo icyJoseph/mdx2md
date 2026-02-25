@@ -1,0 +1,28 @@
+[options]
+strip_imports = true
+strip_exports = true
+expression_handling = "strip"
+preserve_frontmatter = true
+
+[components.Callout]
+template = "> **{type}**: {children}"
+
+[components.CodeBlock]
+template = "```{language}\n{children}\n```"
+
+[components.Badge]
+template = "{label}"
+
+[components._default]
+template = "{children}"
+
+[markdown.tables]
+format = "list"
+
+[markdown.links]
+make_absolute = true
+base_url = "https://docs.example.com"
+
+[markdown.images]
+make_absolute = true
+base_url = "https://cdn.example.com"

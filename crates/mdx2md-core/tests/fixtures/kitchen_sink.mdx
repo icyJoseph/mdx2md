@@ -1,0 +1,37 @@
+---
+title: Kitchen Sink
+author: Test
+---
+
+import { Callout } from './components';
+import CodeBlock from './CodeBlock';
+export const meta = { draft: true };
+
+# Welcome
+
+This is a paragraph with an [internal link](/docs/getting-started) and an
+![image](/assets/logo.png "Logo").
+
+<Callout type="warning">
+  Watch out for **bold** and *italic* inside JSX.
+
+  <CodeBlock language="rust">
+    fn main() {}
+  </CodeBlock>
+</Callout>
+
+Here is an inline component: <Badge label="new" />.
+
+The answer is {40 + 2}.
+
+## Data Table
+
+| Feature     | Status |
+|-------------|--------|
+| Frontmatter | Done   |
+| JSX         | Done   |
+| Tables      | Done   |
+
+export default function Layout({ children }) {
+  return <main>{children}</main>;
+}

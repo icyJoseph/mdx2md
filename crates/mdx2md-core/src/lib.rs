@@ -1,0 +1,86 @@
+pub mod ast;
+pub mod config;
+pub mod parser;
+pub mod rewriter;
+pub mod tokenizer;
+pub mod transform;
+
+use config::Config;
+pub use transform::ComponentResolver;
+
+/// Full MDX-to-Markdown conversion pipeline (Layer 1 + Layer 2).
+pub fn convert(mdx: &str, config: &Config) -> Result<String, ConvertError> {
+    let tokens = tokenizer::tokenize(mdx).map_err(|e| ConvertError(e.message))?;
+    let doc = parser::parse(tokens).map_err(|e| ConvertError(e.message))?;
+    let raw_md = transform::transform(&doc, config);
+    let final_md = rewriter::rewrite_markdown(&raw_md, config);
+    Ok(final_md)
+}
+
+/// Full pipeline with an external component resolver (for WASM JS callbacks).
+pub fn convert_with_resolver(
+    mdx: &str,
+    config: &Config,
+    resolver: &dyn ComponentResolver,
+) -> Result<String, ConvertError> {
+    let tokens = tokenizer::tokenize(mdx).map_err(|e| ConvertError(e.message))?;
+    let doc = parser::parse(tokens).map_err(|e| ConvertError(e.message))?;
+    let raw_md = transform::transform_with_resolver(&doc, config, resolver);
+    let final_md = rewriter::rewrite_markdown(&raw_md, config);
+    Ok(final_md)
+}
+
+#[derive(Debug)]
+pub struct ConvertError(pub String);
+
+impl std::fmt::Display for ConvertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for ConvertError {}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+
+    #[test]
+    fn test_full_pipeline_kitchen_sink() {
+        let input = std::fs::read_to_string("tests/fixtures/kitchen_sink.mdx").unwrap();
+        let toml_str = std::fs::read_to_string("tests/fixtures/kitchen_sink.toml").unwrap();
+        let expected = std::fs::read_to_string("tests/fixtures/kitchen_sink.md").unwrap();
+        let config = Config::from_toml(&toml_str).unwrap();
+
+        let result = convert(&input, &config).unwrap();
+
+        // Normalize for comparison: trim trailing whitespace on each line and normalize line endings
+        let result_lines = normalize(&result);
+        let expected_lines = normalize(&expected);
+
+        if result_lines != expected_lines {
+            eprintln!("=== EXPECTED ===");
+            eprintln!("{expected}");
+            eprintln!("=== GOT ===");
+            eprintln!("{result}");
+            eprintln!("=== DIFF ===");
+            for (i, (r, e)) in result_lines.iter().zip(expected_lines.iter()).enumerate() {
+                if r != e {
+                    eprintln!("Line {}: expected {:?}, got {:?}", i + 1, e, r);
+                }
+            }
+            if result_lines.len() != expected_lines.len() {
+                eprintln!(
+                    "Line count: expected {}, got {}",
+                    expected_lines.len(),
+                    result_lines.len()
+                );
+            }
+            panic!("Output does not match expected");
+        }
+    }
+
+    fn normalize(s: &str) -> Vec<String> {
+        s.lines().map(|l| l.trim_end().to_string()).collect()
+    }
+}
