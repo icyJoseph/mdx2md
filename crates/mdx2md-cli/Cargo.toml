@@ -1,0 +1,9 @@
+[package]
+name = "mdx2md-cli"
+version = "0.1.0"
+edition = "2021"
+description = "MDX to Markdown converter CLI"
+
+[dependencies]
+mdx2md-core = { path = "../mdx2md-core" }
+clap = { version = "4", features = ["derive"] }

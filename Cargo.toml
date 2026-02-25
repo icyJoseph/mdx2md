@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/mdx2md-core", "crates/mdx2md-cli", "crates/mdx2md-wasm"]
+resolver = "2"
