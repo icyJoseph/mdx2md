@@ -63,7 +63,7 @@ const md = convert(mdxSource, {
 
 ## Configuration (TOML)
 
-```toml
+````toml
 [options]
 strip_imports = true
 strip_exports = true
@@ -92,7 +92,7 @@ base_url = "https://docs.example.com"
 [markdown.images]
 make_absolute = true
 base_url = "https://cdn.example.com"
-```
+````
 
 ## Architecture
 
@@ -109,12 +109,12 @@ MDX Source
 
 The dependency footprint is intentionally lean:
 
-| Crate | What we use it for |
-|---|---|
-| **`pulldown-cmark`** | Layer 2 only. Locates table boundaries via its offset iterator so we know which byte ranges to replace with bullet lists. Not used for MDX parsing. |
-| **`serde` + `toml`** | TOML config file deserialization. |
-| **`clap`** | CLI argument parsing. |
-| **`wasm-bindgen` + `js-sys`** | WASM/JS bridge. `wasm-bindgen` generates JS glue, `js-sys` provides `Reflect` and `Function` for working with plain JS objects and callbacks. |
+| Crate                         | What we use it for                                                                                                                                  |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`pulldown-cmark`**          | Layer 2 only. Locates table boundaries via its offset iterator so we know which byte ranges to replace with bullet lists. Not used for MDX parsing. |
+| **`serde` + `toml`**          | TOML config file deserialization.                                                                                                                   |
+| **`clap`**                    | CLI argument parsing.                                                                                                                               |
+| **`wasm-bindgen` + `js-sys`** | WASM/JS bridge. `wasm-bindgen` generates JS glue, `js-sys` provides `Reflect` and `Function` for working with plain JS objects and callbacks.       |
 
 Everything else — MDX tokenizer, MDX parser, JSX transform engine, link/image URL rewriter — is built from scratch with no external parser dependencies.
 
