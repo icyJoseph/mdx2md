@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mdx2md playground</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --bg-surface: #161b22;
+    --bg-input: #0d1117;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --error: #f85149;
+    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  header h1 span { color: var(--text-muted); font-weight: 400; }
+
+  #status {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  #status.ready { color: #3fb950; }
+  #status.error { color: var(--error); }
+
+  .panes {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 0;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--border);
+  }
+
+  .pane:last-child { border-right: none; }
+
+  .pane-header {
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .pane-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  textarea, .output-area {
+    flex: 1;
+    width: 100%;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: var(--bg-input);
+    color: var(--text);
+    border: none;
+    resize: none;
+    outline: none;
+    tab-size: 2;
+  }
+
+  textarea::placeholder { color: var(--text-muted); }
+
+  .output-area {
+    overflow: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .right-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .output-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .config-section {
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .config-section.collapsed .pane-body { display: none; }
+
+  .config-section textarea {
+    height: 180px;
+    flex: none;
+    font-size: 12px;
+  }
+
+  .toggle-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+    font-family: var(--font-sans);
+  }
+
+  .toggle-btn:hover { text-decoration: underline; }
+
+  #error-bar {
+    padding: 8px 16px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--error);
+    background: #f8514922;
+    border-top: 1px solid var(--error);
+    display: none;
+    flex-shrink: 0;
+  }
+
+  #error-bar.visible { display: block; }
+
+  @media (max-width: 768px) {
+    .panes {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr 1fr;
+    }
+    .pane { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>mdx2md <span>playground</span></h1>
+  <span id="status">Loading WASM...</span>
+</header>
+
+<div class="panes">
+  <div class="pane">
+    <div class="pane-header">MDX Input</div>
+    <div class="pane-body">
+      <textarea id="mdx-input" spellcheck="false" placeholder="Paste MDX here..."></textarea>
+    </div>
+  </div>
+
+  <div class="pane right-pane">
+    <div class="output-section">
+      <div class="pane-header">Markdown Output</div>
+      <div class="pane-body">
+        <div class="output-area" id="md-output"></div>
+      </div>
+      <div id="error-bar"></div>
+    </div>
+
+    <div class="config-section" id="config-section">
+      <div class="pane-header">
+        Config
+        <button class="toggle-btn" id="config-toggle">collapse</button>
+      </div>
+      <div class="pane-body">
+        <textarea id="config-input" spellcheck="false"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import init, { convert } from './mdx2md_wasm.js';
+
+const mdxInput = document.getElementById('mdx-input');
+const mdOutput = document.getElementById('md-output');
+const configInput = document.getElementById('config-input');
+const errorBar = document.getElementById('error-bar');
+const status = document.getElementById('status');
+const configSection = document.getElementById('config-section');
+const configToggle = document.getElementById('config-toggle');
+
+const DEFAULT_MDX = `---
+title: Kitchen Sink
+author: Test
+---
+
+import { Callout } from './components';
+import CodeBlock from './CodeBlock';
+export const meta = { draft: true };
+
+# Welcome
+
+This is a paragraph with an [internal link](/docs/getting-started) and an
+![image](/assets/logo.png "Logo").
+
+<Callout type="warning">
+  Watch out for **bold** and *italic* inside JSX.
+
+  <CodeBlock language="rust">
+    fn main() {}
+  </CodeBlock>
+</Callout>
+
+Here is an inline component: <Badge label="new" />.
+
+The answer is {40 + 2}.
+
+## Data Table
+
+| Feature     | Status |
+|-------------|--------|
+| Frontmatter | Done   |
+| JSX         | Done   |
+| Tables      | Done   |
+
+export default function Layout({ children }) {
+  return <main>{children}</main>;
+}`;
+
+const DEFAULT_CONFIG = {
+  stripImports: true,
+  stripExports: true,
+  preserveFrontmatter: true,
+  expressionHandling: "strip",
+  components: {
+    Callout: "> **{type}**: {children}",
+    CodeBlock: "```{language}\\n{children}\\n```",
+    Badge: "{label}",
+    _default: "{children}"
+  },
+  markdown: {
+    tables: "list",
+    links: { makeAbsolute: true, baseUrl: "https://docs.example.com" },
+    images: { makeAbsolute: true, baseUrl: "https://cdn.example.com" }
+  }
+};
+
+mdxInput.value = DEFAULT_MDX;
+configInput.value = JSON.stringify(DEFAULT_CONFIG, null, 2);
+
+configToggle.addEventListener('click', () => {
+  configSection.classList.toggle('collapsed');
+  configToggle.textContent = configSection.classList.contains('collapsed') ? 'expand' : 'collapse';
+});
+
+let debounceTimer;
+function scheduleConvert() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(runConvert, 150);
+}
+
+function runConvert() {
+  const mdx = mdxInput.value;
+  let options;
+
+  try {
+    options = JSON.parse(configInput.value);
+  } catch (e) {
+    showError('Config JSON error: ' + e.message);
+    return;
+  }
+
+  try {
+    const result = convert(mdx, options);
+    mdOutput.textContent = result;
+    hideError();
+  } catch (e) {
+    showError(e.message || String(e));
+  }
+}
+
+function showError(msg) {
+  errorBar.textContent = msg;
+  errorBar.classList.add('visible');
+}
+
+function hideError() {
+  errorBar.classList.remove('visible');
+}
+
+mdxInput.addEventListener('input', scheduleConvert);
+configInput.addEventListener('input', scheduleConvert);
+
+try {
+  await init();
+  status.textContent = 'Ready';
+  status.className = 'ready';
+  runConvert();
+} catch (e) {
+  status.textContent = 'Failed to load WASM';
+  status.className = 'error';
+  showError('WASM init failed: ' + (e.message || String(e)));
+}
+</script>
+</body>
+</html>

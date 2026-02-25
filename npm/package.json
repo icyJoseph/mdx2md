@@ -1,0 +1,19 @@
+{
+  "name": "@icyjoseph/mdx2md",
+  "version": "0.1.0",
+  "description": "MDX to Markdown converter - Rust + WASM",
+  "type": "module",
+  "main": "mdx2md_wasm.js",
+  "types": "mdx2md_wasm.d.ts",
+  "files": [
+    "mdx2md_wasm.js",
+    "mdx2md_wasm.d.ts",
+    "mdx2md_wasm_bg.wasm",
+    "mdx2md_wasm_bg.wasm.d.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/icyjoseph/mdx2md"
+  },
+  "license": "MIT"
+}
