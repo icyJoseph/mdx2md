@@ -8,4 +8,3 @@ description = "MDX to Markdown converter core library"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 pulldown-cmark = "0.12"
-pulldown-cmark-to-cmark = "17"
