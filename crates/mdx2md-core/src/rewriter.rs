@@ -240,11 +240,12 @@ fn make_absolute(base_url: &str, url: &str) -> String {
 /// Rewrite tables to lists using pulldown-cmark to find table boundaries,
 /// then manually constructing the list.
 fn rewrite_tables(input: &str, config: &Config) -> String {
-    let table_cfg = match &config.markdown.tables {
-        Some(tc) if tc.format == TableFormat::List => tc,
-        _ => return input.to_string(),
-    };
-    let _ = table_cfg;
+    if !matches!(
+        &config.markdown.tables,
+        Some(tc) if tc.format == TableFormat::List
+    ) {
+        return input.to_string();
+    }
 
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_TABLES);
