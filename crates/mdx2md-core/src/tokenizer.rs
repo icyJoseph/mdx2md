@@ -74,8 +74,8 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, TokenizeError> {
             }
         }
 
-        // Otherwise, consume one character as Markdown
-        let c = chars.as_bytes()[0] as char;
+        // Otherwise, consume one character as Markdown (safe for multi-byte UTF-8)
+        let c = chars.chars().next().unwrap();
         md_buf.push(c);
         chars = &chars[c.len_utf8()..];
     }
