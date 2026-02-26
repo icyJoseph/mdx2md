@@ -1,34 +1,126 @@
 # mdx2md
 
-A Rust-based MDX-to-Markdown converter with a two-layer transform pipeline, available as a library, CLI, and WASM/JS package.
+Convert MDX (Markdown + JSX) into clean, portable Markdown.
+
+Built from scratch in Rust. Available as a CLI, a Rust library, and a WASM package for JavaScript/TypeScript.
 
 **[Try it in the playground](https://icyjoseph.github.io/mdx2md/)**
 
-## What it does
+## Why
 
-Converts MDX files (Markdown + JSX) into clean Markdown by:
+MDX is great for authoring, but the JSX, imports, and expressions make the files useless outside of MDX-aware tooling. If you want to feed your docs to an LLM, publish them on a platform that only speaks Markdown, or just archive them in a portable format, you need to strip the MDX layer away.
 
-1. **Layer 1 (MDX → raw Markdown):** Resolves JSX components via user-defined templates, strips imports/exports, handles expressions.
-2. **Layer 2 (Markdown → Markdown):** Applies structural rewrites — tables to bullet lists, relative links/images to absolute URLs.
+Existing tools pull in the entire unified/remark ecosystem. mdx2md takes a different approach: a purpose-built tokenizer and parser with minimal dependencies, no plugin resolution, and a single config file.
 
-Both layers are independently configurable and composable.
+## Example
+
+**Input (MDX):**
+
+```mdx
+---
+title: Docs
+---
+
+import { Callout } from './components';
+
+# Getting started
+
+<Callout type="warning">
+  Watch out for **breaking changes**.
+</Callout>
+
+| Feature | Status |
+|---------|--------|
+| Auth    | Done   |
+| API     | Beta   |
+```
+
+**Output (Markdown):**
+
+```markdown
+---
+title: Docs
+---
+
+# Getting started
+
+> **warning**: Watch out for **breaking changes**.
+
+- **Feature**: Auth, **Status**: Done
+- **Feature**: API, **Status**: Beta
+```
+
+Imports and exports are stripped. JSX components are replaced using configurable templates. Tables are converted to lists. Links and images can be made absolute. All controlled by a single TOML config (CLI/Rust) or a plain JS object (WASM).
+
+## Install
+
+### CLI
+
+```sh
+cargo install mdx2md-cli
+```
+
+### npm (WASM)
+
+```sh
+npm install @icyjoseph/mdx2md
+```
+
+### Rust library
+
+```toml
+[dependencies]
+mdx2md-core = "0.1"
+```
 
 ## Usage
 
 ### CLI
 
 ```sh
-# Single file to stdout
 mdx2md input.mdx --config mdx2md.toml
 
-# Single file to output file
 mdx2md input.mdx -o output.md --config mdx2md.toml
 
-# Directory of .mdx files
 mdx2md docs/ -o out/ --config mdx2md.toml
 
-# Stdin/stdout
 cat input.mdx | mdx2md --config mdx2md.toml
+```
+
+### JavaScript / TypeScript (WASM)
+
+```typescript
+import init, { convert } from "@icyjoseph/mdx2md";
+
+await init();
+
+const md = convert(mdxSource, {
+  stripImports: true,
+  stripExports: true,
+  preserveFrontmatter: true,
+  expressionHandling: "strip",
+  components: {
+    Callout: "> **{type}**: {children}",
+    CodeBlock: "```{language}\n{children}\n```",
+    _default: "{children}",
+  },
+  markdown: {
+    tables: "list",
+    links: { makeAbsolute: true, baseUrl: "https://docs.example.com" },
+    images: { makeAbsolute: true, baseUrl: "https://cdn.example.com" },
+  },
+});
+```
+
+Component values can be template strings (simple) or callbacks (full control):
+
+```typescript
+const md = convert(mdxSource, {
+  components: {
+    Callout: (props, children) => `> **${props.type}**: ${children}`,
+    _default: (_props, children) => children ?? "",
+  },
+});
 ```
 
 ### Rust library
@@ -40,30 +132,9 @@ let config = Config::from_toml(&std::fs::read_to_string("mdx2md.toml")?)?;
 let markdown = mdx2md_core::convert(&mdx_source, &config)?;
 ```
 
-### WASM / JavaScript
-
-```typescript
-import { convert } from "mdx2md";
-
-const md = convert(mdxSource, {
-  components: {
-    // Template string (simple case)
-    Image: "![{alt}]({src})",
-
-    // Callback (full control)
-    Callout: ({ type, children }) => `> **${type}**: ${children}`,
-
-    // Catch-all for unknown components
-    _default: ({ children }) => children ?? "",
-  },
-  markdown: {
-    tables: "list",
-    links: { makeAbsolute: true, baseUrl: "https://docs.example.com" },
-  },
-});
-```
-
 ## Configuration (TOML)
+
+Used by the CLI and the Rust library. The WASM/JS API accepts the same options as a plain object.
 
 ````toml
 [options]
@@ -96,37 +167,48 @@ make_absolute = true
 base_url = "https://cdn.example.com"
 ````
 
-## Architecture
+### Component templates
+
+Templates use `{attribute_name}` placeholders that are replaced with the component's props. `{children}` is replaced with the component's rendered children. `_default` is the catch-all for any component without a specific template.
+
+### Expression handling
+
+- `"strip"`: remove `{expressions}` entirely (default)
+- `"preserve_raw"`: keep the raw expression text without braces
+- `"placeholder"`: replace with `[expression]`
+
+### Markdown rewrites
+
+- **Tables**: `format = "list"` converts tables to bullet lists with bolded headers
+- **Links**: `make_absolute = true` prepends `base_url` to relative hrefs
+- **Images**: same as links, for image `src` attributes
+
+## How it works
 
 ```
-MDX Source
-  → MDX Tokenizer (ours)
-  → MDX Parser (ours)
-  → Layer 1: JSX Transform (ours) — resolves components via templates/callbacks
-  → Layer 2: MD Rewriter (ours + pulldown-cmark for element location)
+MDX source string
+  → Tokenizer ─── splits into MDX-aware tokens (JSX, imports, expressions, markdown)
+  → Parser ────── builds a nested AST from the token stream
+  → Layer 1 ───── resolves JSX via templates/callbacks, strips imports/exports
+  → Layer 2 ───── rewrites markdown elements (tables, links, images) in-place
   → Clean Markdown
 ```
 
+The tokenizer and parser are built from scratch with no dependency on remark, unified, or any MDX/JSX parser. Layer 2 uses `pulldown-cmark` only to *locate* elements by byte offset, then performs surgical string replacements to preserve formatting in untouched sections.
+
 ### Dependencies
 
-The dependency footprint is intentionally lean:
-
-| Crate                         | What we use it for                                                                                                                                  |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`pulldown-cmark`**          | Layer 2 only. Locates table boundaries via its offset iterator so we know which byte ranges to replace with bullet lists. Not used for MDX parsing. |
-| **`serde` + `toml`**          | TOML config file deserialization.                                                                                                                   |
-| **`clap`**                    | CLI argument parsing.                                                                                                                               |
-| **`wasm-bindgen` + `js-sys`** | WASM/JS bridge. `wasm-bindgen` generates JS glue, `js-sys` provides `Reflect` and `Function` for working with plain JS objects and callbacks.       |
-
-Everything else — MDX tokenizer, MDX parser, JSX transform engine, link/image URL rewriter — is built from scratch with no external parser dependencies.
+| Crate | Purpose |
+|---|---|
+| `pulldown-cmark` | Layer 2: locates tables/links/images by byte offset |
+| `serde` + `toml` | Config deserialization |
+| `clap` | CLI argument parsing |
+| `wasm-bindgen` + `js-sys` | WASM/JS bridge |
 
 ## Publishing to npm
 
 ```sh
-# Build the WASM package
 ./build-wasm.sh
-
-# Publish (requires npm login with access to @icyjoseph scope)
 cd pkg && npm publish --access public
 ```
 
@@ -142,3 +224,7 @@ npm/
 playground/
   index.html      # Live WASM playground (deployed to GitHub Pages)
 ```
+
+## License
+
+MIT
