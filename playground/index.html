@@ -127,19 +127,58 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
+    min-height: 60px;
+    overflow: hidden;
+  }
+
+  .resize-handle {
+    height: 6px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    cursor: row-resize;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .resize-handle::after {
+    content: '';
+    width: 32px;
+    height: 2px;
+    background: var(--text-muted);
+    border-radius: 1px;
+    opacity: 0.5;
+  }
+
+  .resize-handle:hover::after,
+  .resize-handle.dragging::after {
+    opacity: 1;
+    background: var(--accent);
   }
 
   .config-section {
-    border-top: 1px solid var(--border);
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
   }
 
+  .config-section.collapsed { height: auto !important; }
   .config-section.collapsed .pane-body { display: none; }
+  .config-section.collapsed + .resize-handle,
+  .config-section.collapsed ~ .resize-handle { display: none; }
+
+  .config-section .pane-body {
+    flex: 1;
+    min-height: 0;
+  }
 
   .config-section textarea {
-    height: 180px;
-    flex: none;
+    height: 100%;
+    flex: 1;
     font-size: 12px;
   }
 
@@ -201,6 +240,8 @@
       <div id="error-bar"></div>
     </div>
 
+    <div class="resize-handle" id="resize-handle"></div>
+
     <div class="config-section" id="config-section">
       <div class="pane-header">
         Config
@@ -223,6 +264,7 @@ const errorBar = document.getElementById('error-bar');
 const status = document.getElementById('status');
 const configSection = document.getElementById('config-section');
 const configToggle = document.getElementById('config-toggle');
+const resizeHandle = document.getElementById('resize-handle');
 
 const DEFAULT_MDX = `---
 title: Kitchen Sink
@@ -283,9 +325,41 @@ const DEFAULT_CONFIG = {
 mdxInput.value = DEFAULT_MDX;
 configInput.value = JSON.stringify(DEFAULT_CONFIG, null, 2);
 
+configSection.style.height = '40%';
+
 configToggle.addEventListener('click', () => {
-  configSection.classList.toggle('collapsed');
-  configToggle.textContent = configSection.classList.contains('collapsed') ? 'expand' : 'collapse';
+  const collapsed = configSection.classList.toggle('collapsed');
+  configToggle.textContent = collapsed ? 'expand' : 'collapse';
+  resizeHandle.style.display = collapsed ? 'none' : '';
+  if (!collapsed) configSection.style.height = '40%';
+});
+
+let dragging = false;
+resizeHandle.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  dragging = true;
+  resizeHandle.classList.add('dragging');
+  document.body.style.cursor = 'row-resize';
+  document.body.style.userSelect = 'none';
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const rightPane = configSection.parentElement;
+  const rect = rightPane.getBoundingClientRect();
+  const offsetFromBottom = rect.bottom - e.clientY;
+  const minH = 48;
+  const maxH = rect.height - 100;
+  const h = Math.max(minH, Math.min(maxH, offsetFromBottom));
+  configSection.style.height = h + 'px';
+});
+
+window.addEventListener('mouseup', () => {
+  if (!dragging) return;
+  dragging = false;
+  resizeHandle.classList.remove('dragging');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
 });
 
 let debounceTimer;
