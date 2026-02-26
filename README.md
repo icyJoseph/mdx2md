@@ -21,16 +21,14 @@ Existing tools pull in the entire unified/remark ecosystem. mdx2md takes a diffe
 title: Docs
 ---
 
-import { Callout } from './components';
+import { Callout } from "./components";
 
 # Getting started
 
-<Callout type="warning">
-  Watch out for **breaking changes**.
-</Callout>
+<Callout type="warning">Watch out for **breaking changes**.</Callout>
 
 | Feature | Status |
-|---------|--------|
+| ------- | ------ |
 | Auth    | Done   |
 | API     | Beta   |
 ```
@@ -89,7 +87,7 @@ cat input.mdx | mdx2md --config mdx2md.toml
 
 ### JavaScript / TypeScript (WASM)
 
-```typescript
+````typescript
 import init, { convert } from "@icyjoseph/mdx2md";
 
 await init();
@@ -110,7 +108,7 @@ const md = convert(mdxSource, {
     images: { makeAbsolute: true, baseUrl: "https://cdn.example.com" },
   },
 });
-```
+````
 
 Component values can be template strings (simple) or callbacks (full control):
 
@@ -194,22 +192,16 @@ MDX source string
   → Clean Markdown
 ```
 
-The tokenizer and parser are built from scratch with no dependency on remark, unified, or any MDX/JSX parser. Layer 2 uses `pulldown-cmark` only to *locate* elements by byte offset, then performs surgical string replacements to preserve formatting in untouched sections.
+The tokenizer and parser are built from scratch with no dependency on remark, unified, or any MDX/JSX parser. Layer 2 uses `pulldown-cmark` only to _locate_ elements by byte offset, then performs surgical string replacements to preserve formatting in untouched sections.
 
 ### Dependencies
 
-| Crate | Purpose |
-|---|---|
-| `pulldown-cmark` | Layer 2: locates tables/links/images by byte offset |
-| `serde` + `toml` | Config deserialization |
-| `clap` | CLI argument parsing |
-| `wasm-bindgen` + `js-sys` | WASM/JS bridge |
-
-## Publishing to npm
-
-```sh
-./publish.sh
-```
+| Crate                     | Purpose                                             |
+| ------------------------- | --------------------------------------------------- |
+| `pulldown-cmark`          | Layer 2: locates tables/links/images by byte offset |
+| `serde` + `toml`          | Config deserialization                              |
+| `clap`                    | CLI argument parsing                                |
+| `wasm-bindgen` + `js-sys` | WASM/JS bridge                                      |
 
 ## Project structure
 
