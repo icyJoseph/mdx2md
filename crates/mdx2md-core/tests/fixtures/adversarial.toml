@@ -1,0 +1,21 @@
+[options]
+strip_imports = true
+strip_exports = true
+expression_handling = "strip"
+preserve_frontmatter = true
+
+[components._default]
+template = ""
+
+[markdown]
+strip_html_comments = true
+
+[markdown.tables]
+format = "list"
+
+[markdown.links]
+strip = false
+allowed_domains = ["docs.example.com"]
+
+[markdown.images]
+strip = true

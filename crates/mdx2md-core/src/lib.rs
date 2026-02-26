@@ -80,6 +80,52 @@ mod integration_tests {
         }
     }
 
+    #[test]
+    fn test_full_pipeline_adversarial() {
+        let input = std::fs::read_to_string("tests/fixtures/adversarial.mdx").unwrap();
+        let toml_str = std::fs::read_to_string("tests/fixtures/adversarial.toml").unwrap();
+        let expected = std::fs::read_to_string("tests/fixtures/adversarial.md").unwrap();
+        let config = Config::from_toml(&toml_str).unwrap();
+
+        let result = convert(&input, &config).unwrap();
+
+        let result_lines = normalize(&result);
+        let expected_lines = normalize(&expected);
+
+        if result_lines != expected_lines {
+            eprintln!("=== EXPECTED ===");
+            eprintln!("{expected}");
+            eprintln!("=== GOT ===");
+            eprintln!("{result}");
+            eprintln!("=== DIFF ===");
+            for (i, (r, e)) in result_lines.iter().zip(expected_lines.iter()).enumerate() {
+                if r != e {
+                    eprintln!("Line {}: expected {:?}, got {:?}", i + 1, e, r);
+                }
+            }
+            if result_lines.len() != expected_lines.len() {
+                eprintln!(
+                    "Line count: expected {}, got {}",
+                    expected_lines.len(),
+                    result_lines.len()
+                );
+            }
+            panic!("Adversarial output does not match expected");
+        }
+
+        // Verify specific sanitization guarantees
+        assert!(!result.contains("evil.example"), "Should strip evil domain imports");
+        assert!(!result.contains("phishing.example"), "Should strip phishing links");
+        assert!(!result.contains("malicious.example"), "Should strip hidden context");
+        assert!(!result.contains("tracker.evil"), "Should strip tracking images");
+        assert!(!result.contains("javascript:"), "Should strip javascript: URIs");
+        assert!(!result.contains("SECRET_KEY"), "Should strip expressions");
+        assert!(!result.contains("<!--"), "Should strip HTML comments");
+        assert!(!result.contains("Ignore all previous"), "Should strip prompt injections");
+        assert!(result.contains("https://docs.example.com/setup"), "Should keep allowed links");
+        assert!(result.contains("/docs/quickstart"), "Should keep relative links");
+    }
+
     fn normalize(s: &str) -> Vec<String> {
         s.lines().map(|l| l.trim_end().to_string()).collect()
     }
