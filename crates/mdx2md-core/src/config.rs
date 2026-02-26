@@ -55,6 +55,8 @@ pub struct MarkdownRewrites {
     pub links: Option<LinkRewrite>,
     #[serde(default)]
     pub images: Option<ImageRewrite>,
+    #[serde(default)]
+    pub strip_html_comments: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,6 +78,10 @@ pub struct LinkRewrite {
     pub make_absolute: bool,
     #[serde(default)]
     pub base_url: String,
+    #[serde(default)]
+    pub strip: bool,
+    #[serde(default)]
+    pub allowed_domains: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -84,6 +90,8 @@ pub struct ImageRewrite {
     pub make_absolute: bool,
     #[serde(default)]
     pub base_url: String,
+    #[serde(default)]
+    pub strip: bool,
 }
 
 fn default_true() -> bool {
