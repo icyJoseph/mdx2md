@@ -208,8 +208,7 @@ The tokenizer and parser are built from scratch with no dependency on remark, un
 ## Publishing to npm
 
 ```sh
-./build-wasm.sh
-cd pkg && npm publish --access public
+./publish.sh
 ```
 
 ## Project structure

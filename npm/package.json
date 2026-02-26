@@ -1,6 +1,6 @@
 {
   "name": "@icyjoseph/mdx2md",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MDX to Markdown converter - Rust + WASM",
   "type": "module",
   "main": "mdx2md_wasm.js",
