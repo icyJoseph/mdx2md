@@ -2,6 +2,8 @@
 
 A Rust-based MDX-to-Markdown converter with a two-layer transform pipeline, available as a library, CLI, and WASM/JS package.
 
+**[Try it in the playground](https://icyjoseph.github.io/mdx2md/)**
+
 ## What it does
 
 Converts MDX files (Markdown + JSX) into clean Markdown by:
@@ -118,6 +120,16 @@ The dependency footprint is intentionally lean:
 
 Everything else — MDX tokenizer, MDX parser, JSX transform engine, link/image URL rewriter — is built from scratch with no external parser dependencies.
 
+## Publishing to npm
+
+```sh
+# Build the WASM package
+./build-wasm.sh
+
+# Publish (requires npm login with access to @icyjoseph scope)
+cd pkg && npm publish --access public
+```
+
 ## Project structure
 
 ```
@@ -125,4 +137,8 @@ crates/
   mdx2md-core/    # Library: tokenizer, parser, config, transform, rewriter
   mdx2md-cli/     # Binary: CLI tool
   mdx2md-wasm/    # WASM bindings for JS/TS consumers
+npm/
+  package.json    # Canonical npm package metadata (@icyjoseph/mdx2md)
+playground/
+  index.html      # Live WASM playground (deployed to GitHub Pages)
 ```
