@@ -1,4 +1,4 @@
-use js_sys::{Function, Object, Reflect};
+use js_sys::{Array, Function, Object, Reflect};
 use mdx2md_core::config::*;
 use mdx2md_core::ComponentResolver;
 use std::collections::HashMap;
@@ -118,6 +118,8 @@ fn parse_options(options: &JsValue) -> Result<(Config, HashMap<String, Function>
                     config.markdown.links = Some(LinkRewrite {
                         make_absolute: get_bool(&links_val, "makeAbsolute").unwrap_or(false),
                         base_url: get_string(&links_val, "baseUrl").unwrap_or_default(),
+                        strip: get_bool(&links_val, "strip").unwrap_or(false),
+                        allowed_domains: get_string_array(&links_val, "allowedDomains"),
                     });
                 }
             }
@@ -128,8 +130,14 @@ fn parse_options(options: &JsValue) -> Result<(Config, HashMap<String, Function>
                     config.markdown.images = Some(ImageRewrite {
                         make_absolute: get_bool(&images_val, "makeAbsolute").unwrap_or(false),
                         base_url: get_string(&images_val, "baseUrl").unwrap_or_default(),
+                        strip: get_bool(&images_val, "strip").unwrap_or(false),
                     });
                 }
+            }
+
+            // HTML comments
+            if let Some(v) = get_bool(&md_val, "stripHtmlComments") {
+                config.markdown.strip_html_comments = v;
             }
         }
     }
@@ -147,4 +155,15 @@ fn get_bool(obj: &JsValue, key: &str) -> Option<bool> {
     Reflect::get(obj, &JsValue::from_str(key))
         .ok()
         .and_then(|v| v.as_bool())
+}
+
+fn get_string_array(obj: &JsValue, key: &str) -> Vec<String> {
+    let val = match Reflect::get(obj, &JsValue::from_str(key)) {
+        Ok(v) if !v.is_undefined() && !v.is_null() => v,
+        _ => return vec![],
+    };
+    let arr: Array = val.unchecked_into();
+    (0..arr.length())
+        .filter_map(|i| arr.get(i).as_string())
+        .collect()
 }

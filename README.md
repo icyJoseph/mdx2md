@@ -4,7 +4,7 @@ Convert MDX (Markdown + JSX) into clean, portable Markdown.
 
 Built from scratch in Rust. Available as a CLI, a Rust library, and a WASM package for JavaScript/TypeScript.
 
-**[Try it in the playground](https://icyjoseph.github.io/mdx2md/)**
+**[Try it in the playground](https://icyjoseph.github.io/mdx2md/)** | **[Sanitization demo](https://icyjoseph.github.io/mdx2md/sanitize.html)**
 
 ## Why
 
@@ -68,7 +68,7 @@ npm install @icyjoseph/mdx2md
 
 ```toml
 [dependencies]
-mdx2md-core = "0.1"
+mdx2md-core = "0.2"
 ```
 
 ## Usage
@@ -153,16 +153,22 @@ template = "{label}"
 [components._default]
 template = "{children}"
 
+[markdown]
+strip_html_comments = false     # remove <!-- ... --> blocks
+
 [markdown.tables]
 format = "list"
 
 [markdown.links]
 make_absolute = true
 base_url = "https://docs.example.com"
+strip = false                   # remove all links, keep text
+allowed_domains = []            # only keep links to these domains
 
 [markdown.images]
 make_absolute = true
 base_url = "https://cdn.example.com"
+strip = false                   # remove all images
 ````
 
 ### Component templates
@@ -179,7 +185,42 @@ Templates use `{attribute_name}` placeholders that are replaced with the compone
 
 - **Tables**: `format = "list"` converts tables to bullet lists with bolded headers
 - **Links**: `make_absolute = true` prepends `base_url` to relative hrefs
-- **Images**: same as links, for image `src` attributes
+- **Links**: `strip = true` removes all links, keeping only the link text
+- **Links**: `allowed_domains = ["example.com"]` strips links whose domain is not in the list (relative URLs are always kept)
+- **Images**: `make_absolute = true` prepends `base_url` to relative image sources
+- **Images**: `strip = true` removes all images
+- **HTML comments**: `strip_html_comments = true` removes `<!-- ... -->` blocks
+
+Precedence for links: `strip` > `allowed_domains` > `make_absolute`.
+
+## Use case: sanitize MDX for LLMs
+
+When feeding MDX documents to an LLM (for summarization, RAG, or chatbot context), the JSX, expressions, and hidden content become attack surface. Hidden components can carry prompt injections, expressions can leak secrets, and links can point to phishing sites.
+
+mdx2md can strip all of this in a single pass:
+
+```toml
+[options]
+strip_imports = true
+strip_exports = true
+expression_handling = "strip"
+
+[components._default]
+template = ""
+
+[markdown]
+strip_html_comments = true
+
+[markdown.links]
+allowed_domains = ["docs.example.com"]
+
+[markdown.images]
+strip = true
+```
+
+This config strips imports, exports, expressions, unknown JSX components, HTML comments, tracking images, and any link not pointing to `docs.example.com`. See [docs/llm-sanitization.md](docs/llm-sanitization.md) for the full threat model, before/after examples, and recommended configurations.
+
+**[Try the sanitization demo](https://icyjoseph.github.io/mdx2md/sanitize.html)**
 
 ## How it works
 
@@ -210,10 +251,13 @@ crates/
   mdx2md-core/    # Library: tokenizer, parser, config, transform, rewriter
   mdx2md-cli/     # Binary: CLI tool
   mdx2md-wasm/    # WASM bindings for JS/TS consumers
+docs/
+  llm-sanitization.md  # LLM sanitization guide and threat model
 npm/
   package.json    # Canonical npm package metadata (@icyjoseph/mdx2md)
 playground/
   index.html      # Live WASM playground (deployed to GitHub Pages)
+  sanitize.html   # LLM sanitization demo
 ```
 
 ## License

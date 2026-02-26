@@ -1,6 +1,6 @@
 [package]
 name = "mdx2md-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "MDX to Markdown converter core library"
 
