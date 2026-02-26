@@ -44,12 +44,17 @@ impl std::error::Error for ConvertError {}
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+    }
 
     #[test]
     fn test_full_pipeline_kitchen_sink() {
-        let input = std::fs::read_to_string("tests/fixtures/kitchen_sink.mdx").unwrap();
-        let toml_str = std::fs::read_to_string("tests/fixtures/kitchen_sink.toml").unwrap();
-        let expected = std::fs::read_to_string("tests/fixtures/kitchen_sink.md").unwrap();
+        let input = std::fs::read_to_string(fixture_path("kitchen_sink.mdx")).unwrap();
+        let toml_str = std::fs::read_to_string(fixture_path("kitchen_sink.toml")).unwrap();
+        let expected = std::fs::read_to_string(fixture_path("kitchen_sink.md")).unwrap();
         let config = Config::from_toml(&toml_str).unwrap();
 
         let result = convert(&input, &config).unwrap();
@@ -82,9 +87,9 @@ mod integration_tests {
 
     #[test]
     fn test_full_pipeline_adversarial() {
-        let input = std::fs::read_to_string("tests/fixtures/adversarial.mdx").unwrap();
-        let toml_str = std::fs::read_to_string("tests/fixtures/adversarial.toml").unwrap();
-        let expected = std::fs::read_to_string("tests/fixtures/adversarial.md").unwrap();
+        let input = std::fs::read_to_string(fixture_path("adversarial.mdx")).unwrap();
+        let toml_str = std::fs::read_to_string(fixture_path("adversarial.toml")).unwrap();
+        let expected = std::fs::read_to_string(fixture_path("adversarial.md")).unwrap();
         let config = Config::from_toml(&toml_str).unwrap();
 
         let result = convert(&input, &config).unwrap();
