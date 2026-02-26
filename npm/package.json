@@ -9,7 +9,8 @@
     "mdx2md_wasm.js",
     "mdx2md_wasm.d.ts",
     "mdx2md_wasm_bg.wasm",
-    "mdx2md_wasm_bg.wasm.d.ts"
+    "mdx2md_wasm_bg.wasm.d.ts",
+    "README.md"
   ],
   "repository": {
     "type": "git",

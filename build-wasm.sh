@@ -14,8 +14,9 @@ echo "Generating JS bindings..."
 mkdir -p pkg
 wasm-bindgen --target web --out-dir pkg "$WASM_FILE"
 
-echo "Copying package.json..."
+echo "Copying package.json and README..."
 cp npm/package.json pkg/package.json
+cp README.md pkg/README.md
 
 echo "Done. Output in pkg/"
 ls -lh pkg/
