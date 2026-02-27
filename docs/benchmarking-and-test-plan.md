@@ -1,6 +1,6 @@
-# Benchmarking & Test Plan for mdx2md
+# Benchmarking & Tests for mdx2md
 
-Plan for what to benchmark, which specs/test suites to use, and how to confirm the implementation.
+What we benchmark against, which suites we use, how to rerun them, and current performance vs `@mdx-js/mdx` + remark.
 
 ---
 
@@ -8,11 +8,11 @@ Plan for what to benchmark, which specs/test suites to use, and how to confirm t
 
 - **Correctness**: MDX → Markdown behavior matches a defined spec and doesn’t regress.
 - **Coverage**: Pure Markdown passes through unchanged (or as configured); MDX constructs (JSX, ESM, expressions) are handled per config.
-- **Performance** (optional): Measure parse/convert time for regression and comparison.
+- **Performance**: Measure parse/convert time for regression tracking and for rough comparison against a canonical JS MDX stack.
 
 ---
 
-## 2. What to Benchmark Against
+## 2. What we benchmark against
 
 ### 2.1 Pure Markdown (Layer 2 + identity)
 
@@ -20,16 +20,25 @@ Plan for what to benchmark, which specs/test suites to use, and how to confirm t
 
 - **Spec**: [commonmark/commonmark-spec](https://github.com/commonmark/commonmark-spec) — `spec.txt` (human-readable) and [spec.json](https://spec.commonmark.org/0.31.2/spec.json) (machine-readable).
 - **Format**: Each example has `markdown` (input) and `html` (reference output). We don’t render to HTML; we care that:
-  - **Identity**: With a “passthrough” config (no table/list/link rewrites), running `convert(spec["markdown"], passthrough_config)` should yield the same string (or equivalent Markdown). That validates we don’t break CommonMark when no MDX is present.
-- **Caveat**: CommonMark spec is markdown → HTML. For mdx2md we only need markdown → markdown. So the use is: “our parser/rewriter doesn’t corrupt standard Markdown.” Running all spec examples through `convert` and checking round-trip (or at least no crash + optional structural sanity) is the right benchmark for “Markdown compatibility.”
+  - **Passthrough**: With a “passthrough” config (no table/list/link rewrites), running `convert(spec["markdown"], passthrough_config)` should at minimum succeed and ideally be an identity transform after normalization. That validates we don’t break CommonMark when no MDX is present.
+- **Caveat**: CommonMark spec is markdown → HTML. For mdx2md we only need markdown → markdown. So the use is: “our parser/rewriter doesn’t corrupt standard Markdown.” Running all spec examples through `convert` and asserting “no crash” is the main check; identity is a best-effort extra (some backslash escape examples differ).
 
-**Possible implementation:**
+**Implementation (current):**
 
-- Add a test (or small binary) that:
-  - Downloads or vendors `spec.json`.
-  - For each `markdown` string, runs `convert(md, passthrough_config)`.
-  - Asserts either: output == input (strict), or “no panic + optional normalization” (softer).
-- Start with “no panic” and “output equals input” for a passthrough config; later add GFM-only or link/table rewrite tests if needed.
+- Vendored file: `crates/mdx2md-core/tests/commonmark_spec.json`.
+- Test: `crates/mdx2md-core/tests/commonmark_spec.rs`:
+  - `commonmark_spec_passthrough_no_panic`: deserializes `spec.json` with `serde_json`, runs every `markdown` example through `convert(md, Config::default())`, and asserts `Ok(_)`.
+  - `commonmark_spec_passthrough_identity`: `#[ignore]` test that also asserts identity after normalizing line endings; ignored because some examples (backslash escapes) intentionally differ.
+
+**How to run:**
+
+```bash
+cd worktree-benchmarking
+cargo test -p mdx2md-core commonmark_spec_passthrough_no_panic
+
+# Optional, stricter identity check:
+cargo test -p mdx2md-core --test commonmark_spec -- --ignored
+```
 
 ### 2.2 MDX syntax (reference: micromark extensions)
 
@@ -41,93 +50,115 @@ Plan for what to benchmark, which specs/test suites to use, and how to confirm t
   - [micromark-extension-mdxjs-esm](https://github.com/micromark/micromark-extension-mdxjs-esm) — `import`/`export`.
 - **No official MDX→Markdown spec**: There is no standard “MDX in → Markdown out” test suite. So we define our own expected behavior and optionally align with “what micromark parses as valid MDX.”
 
-**Ways to use this:**
+**How we use this:**
 
-1. **Syntax coverage**: Build fixtures that exercise each construct from the micromark docs (JSX tags, attributes, expressions, ESM). We don’t need to match micromark’s AST; we need to **accept** the same inputs (no parse errors on valid MDX) and produce **our** defined Markdown (templates, strip, etc.).
-2. **Error cases**: Optionally add tests for invalid MDX that we intentionally reject (e.g. unclosed tags) so we don’t silently emit wrong output.
-3. **Extracting cases**: The micromark-extension-mdx-jsx repo has a single large `test/index.js`; we could manually copy a few representative examples into our fixtures rather than depending on that file.
+1. **Syntax coverage**: Fixtures exercise the constructs described in the micromark docs (JSX tags, attributes, expressions, ESM). We don’t need to match micromark’s AST; we need to **accept** the same inputs (no parse errors on valid MDX) and produce **our** defined Markdown (templates, strip, etc.).
+2. **Error cases**: Negative tests assert that invalid MDX we intentionally reject (e.g. unclosed tags) returns `Err` so we don’t silently emit wrong output.
+3. **Extracting cases**: Where useful, we mirror or adapt examples from micromark’s tests, but the canonical spec for MDX → Markdown here is our own fixtures.
 
 ### 2.3 Our own behavior (MDX → Markdown)
 
 **Source: Project fixtures + config**
 
-- **Current fixtures**: `kitchen_sink.mdx` (+ `.toml`, `.md`) and `adversarial.mdx` (+ `.toml`, `.md`) already define “expected” Markdown for a given config. This is the **authoritative** spec for “what mdx2md does.”
-- **Expand with**:
-  - One fixture per major feature (e.g. only JSX, only expressions, only ESM, only tables/links).
-  - Edge cases: nested JSX, `{children}`, expression in attribute, empty components, HTML comments, etc.
-  - Sanitization: `adversarial` already targets LLM/safety; we can add more cases (XSS, `javascript:`, allowed_domains, strip images/links).
+- **Core fixtures**: `kitchen_sink.mdx` (+ `.toml`, `.md`) and `adversarial.mdx` (+ `.toml`, `.md`) define “expected” Markdown for a given config. This is the **authoritative** spec for “what mdx2md does**.
+- **Focused fixtures** (all live in `crates/mdx2md-core/tests/fixtures/` with `.mdx` + `.toml` + `.md`):
+  - `esm_only` — only import/export; expected `.md` has them stripped.
+  - `jsx_only` — only components; expected `.md` uses templates.
+  - `expressions_only` — only `{expr}`; uses `expression_handling = "strip"` to drop expressions.
+  - `tables_links` — only Markdown tables/links; tests list format and absolute URLs.
+- **Sanitization**: `adversarial` targets LLM/safety; it exercises XSS-style links, `javascript:` URLs, `allowed_domains`, HTML comments, hidden prompt injections, and images.
 
-**Benchmark definition**: “Implementation is correct” = all fixture tests pass (input MDX + config → expected .md). No external suite defines that; we own it.
+**Definition of “correct”**: All fixture tests pass (input MDX + config → expected `.md`), and negative tests behave as expected (invalid MDX returns `Err`).
 
 ---
 
-## 3. Test Suites / Specs We Can Use
+## 3. Test suites / specs in use
 
 | Source | What it gives | How we use it |
 |--------|----------------|----------------|
-| **CommonMark spec.json** | ~600+ markdown examples | Run each through `convert` with passthrough config; assert no crash and (optionally) output == input. Validates “we don’t break standard Markdown.” |
+| **CommonMark spec.json** | ~600+ markdown examples | Vendored as `tests/commonmark_spec.json`; `tests/commonmark_spec.rs` runs each `markdown` example through `convert` with a passthrough config and asserts no panic. An optional ignored test additionally checks identity. |
 | **GFM (GitHub)** | Tables, strikethrough, etc. | [cmark-gfm](https://github.com/github/cmark-gfm) has `test/spec.txt`. If we want GFM-specific behavior (e.g. tables), we can add a subset of GFM tests; currently we rewrite tables to lists, so “expected” is our choice. |
-| **micromark-extension-mdx-jsx (syntax)** | BNF + docs for JSX | Use to design our own MDX fixtures (valid/invalid) so we stay aligned with “real” MDX. |
-| **mdx-js/specification** | Archived; points to mdxjs.com + micromark | No fixtures to pull; only high-level reference. |
-| **Existing mdx2md fixtures** | kitchen_sink, adversarial | Core regression suite; expand as needed. |
+| **micromark-extension-mdx-jsx (syntax)** | BNF + docs for JSX | Used as reference for which JSX constructs our fixtures cover. |
+| **mdx-js/specification** | Archived; points to mdxjs.com + micromark | High-level reference; no fixtures to pull. |
+| **Existing mdx2md fixtures** | kitchen_sink, adversarial, esm_only, jsx_only, expressions_only, tables_links | Core regression suite; defines mdx2md’s MDX → Markdown behavior. |
 
 ---
 
-## 4. How to Confirm the Implementation
+## 4. How we confirm the implementation
 
-### 4.1 Unit / integration (already in place)
+### 4.1 Unit / integration (core crate)
 
 - **Tokenizer**: `tokenizer.rs` tests (frontmatter, import/export, JSX, expressions, markdown passthrough).
 - **Parser**: `parser.rs` tests (AST shape, nested JSX, errors).
 - **Transform**: `transform.rs` tests (strip imports/exports, frontmatter, component templates, expressions).
 - **Rewriter**: `rewriter.rs` tests (tables, links, images, allowed_domains, strip, HTML comments).
-- **Full pipeline**: `lib.rs` integration tests with `kitchen_sink` and `adversarial` fixtures.
+- **Full pipeline**: `lib.rs` integration tests:
+  - `test_full_pipeline_kitchen_sink` and `test_full_pipeline_adversarial` (original fixtures).
+  - `test_full_pipeline_all_fixtures` which drives `kitchen_sink`, `adversarial`, `esm_only`, `jsx_only`, `expressions_only`, and `tables_links` and compares against expected `.md`.
+  - `test_invalid_mdx_returns_error` which asserts that clearly invalid MDX (unclosed JSX) returns `Err`.
 
-**Improvement (from TODOS.md):** Use a shared `fixture_path()` based on `env!("CARGO_MANIFEST_DIR")` in all tests that read `tests/fixtures/...`, so paths work from any cwd.
+All fixture-based tests use a shared `fixture_path(name)` helper based on `env!("CARGO_MANIFEST_DIR")` so paths work regardless of current working directory.
 
-### 4.2 CommonMark compliance (new)
+### 4.2 Performance benchmarks (Criterion)
 
-- Add a test (or `tests/commonmark_spec.rs`) that:
-  - Loads CommonMark `spec.json` (vendored or fetched in build).
-  - Uses a strict passthrough config (no table/link rewrites, no strip).
-  - For each example, runs `convert(markdown, config)` and checks:
-    - No panic.
-    - Optional: `output == markdown` (after normalizing line endings).
-- If we later change table/link behavior, we can still run only the “pure markdown” subset or exclude examples that we intentionally rewrite.
+**Tool**: [criterion](https://crates.io/crates/criterion) via `crates/mdx2md-core/benches/convert.rs` and the `[[bench]]` entry in `crates/mdx2md-core/Cargo.toml`.
 
-### 4.3 MDX fixture expansion (new)
+**Benchmarks:**
 
-- Add more fixtures under `tests/fixtures/`:
-  - `esm_only.mdx` — only import/export; expected .md has them stripped.
-  - `jsx_only.mdx` — only components; expected .md uses templates.
-  - `expressions_only.mdx` — only `{expr}`; strip vs preserve_raw vs placeholder.
-  - `tables_links.mdx` — only Markdown tables/links; test list format and absolute URLs.
-  - Optional: `invalid.mdx` — unclosed tag / invalid JSX; expect `convert` to return `Err`.
-- Keep the pattern: `*.mdx` + `*.toml` + `*.md` (expected), and one integration test per fixture or a loop over a list of names.
+- `convert_small_mdx` — `kitchen_sink.mdx` (~1–2 KB, realistic doc).
+- `convert_large_mdx` — synthetic MDX (~100 KB) built from repeated paragraphs and JSX to stress tokenizer/parser/rewriter.
+- `convert_commonmark_identity` — large CommonMark-only string (repeated headings/paragraphs) to measure Layer 2 overhead.
 
-### 4.4 Performance benchmarks (optional)
+**How to run:**
 
-- **Tool**: [criterion](https://crates.io/crates/criterion) in a `[[bench]]` or a separate `benches/` crate.
-- **Metrics**:
-  - `convert()` on `kitchen_sink.mdx` (small).
-  - `convert()` on a large synthetic MDX (e.g. 100 KB) to stress tokenizer/parser/rewriter.
-  - Optionally: “identity” run over a large CommonMark-only file to measure Layer 2 overhead.
-- **Baseline**: Record first run; use criterion to detect regressions (e.g. in CI).
+```bash
+cd worktree-benchmarking
+cargo bench -p mdx2md-core
+```
+
+**Example results (on the author’s machine):**
+
+- `convert_small_mdx`: ~**0.015 ms** per run (~15 µs).
+- `convert_large_mdx`: ~**0.81 ms** per run.
+- `convert_commonmark_identity`: ~**0.14 ms** per run.
+
+These numbers serve as the baseline for future regression tracking.
+
+### 4.3 Comparison with @mdx-js/mdx + remark (Node)
+
+For a rough external baseline, there is a small Node benchmark under `benchmarks/mdx-js/bench.mjs` which:
+
+- Uses `@mdx-js/mdx`’s `compile()` on:
+  - `kitchen_sink.mdx`.
+  - A synthetic ~100 KB MDX string similar to the Rust large benchmark.
+- Uses a `remark-parse` + `remark-stringify` pipeline on a large CommonMark-only string.
+
+**How to run:**
+
+```bash
+cd benchmarks/mdx-js
+node bench.mjs
+```
+
+**Example results (same machine as the Criterion run):**
+
+- `mdx-js compile (kitchen_sink)`: ~**2.09 ms**.
+- `mdx-js compile (large ~100KB)`: ~**43.1 ms**.
+- `remark parse+stringify (commonmark)`: ~**44.6 ms**.
+
+**Very rough ratios vs `mdx2md-core`:**
+
+- Small MDX: mdx2md is O(10²)× faster (~140× here).
+- Large MDX: mdx2md is O(10¹–10²)× faster (~50× here).
+- CommonMark-only text: mdx2md is O(10²–10³)× faster (~300× here).
+
+This is not a strict apples-to-apples comparison (different outputs and ecosystems), but it shows that the Rust core is “fast enough” by a wide margin for typical doc workloads.
 
 ---
 
-## 5. Suggested Order of Work
+## 5. Summary
 
-1. **Fixture path cleanup** (from TODOS): Use `env!("CARGO_MANIFEST_DIR")` in all tests that reference `tests/fixtures/...`.
-2. **CommonMark spec test**: Vendor or fetch `spec.json`, add one test that runs all markdown examples through `convert` with passthrough and asserts no panic + identity (or document any intentional differences).
-3. **Expand MDX fixtures**: Add 3–5 small fixtures (esm_only, jsx_only, expressions_only, tables_links, maybe one invalid) and wire them into integration tests.
-4. **Document expected behavior**: In README or `docs/`, state that “MDX syntax follows mdxjs.com / micromark; MDX→Markdown behavior is defined by our fixtures and config.”
-5. **Benchmarks**: Add criterion and 2–3 benchmarks (small MDX, large MDX, maybe CommonMark identity) for future regression testing.
-
----
-
-## 6. Summary
-
-- **Spec we can use**: **CommonMark spec.json** — to ensure we don’t break standard Markdown (passthrough identity).
-- **No off-the-shelf MDX→Markdown suite**: MDX has a syntax spec (micromark) but no “expected Markdown output” spec; **our fixtures are the spec** for mdx2md.
-- **Confirm implementation by**: (1) existing unit + integration tests, (2) CommonMark passthrough test, (3) more MDX fixtures, (4) optional criterion benchmarks for performance.
+- **Specs we use**: **CommonMark spec.json** for Markdown compatibility, plus MDX syntax docs from mdxjs/micromark.
+- **MDX → Markdown behavior**: There is no off-the-shelf MDX→Markdown spec; the fixtures in `crates/mdx2md-core/tests/fixtures/` are the spec for mdx2md.
+- **Correctness**: Verified via unit tests, full-pipeline fixture tests, CommonMark passthrough, and negative tests for invalid MDX.
+- **Performance**: Tracked via Criterion benchmarks in `mdx2md-core` with a rough external comparison to `@mdx-js/mdx` + remark.
