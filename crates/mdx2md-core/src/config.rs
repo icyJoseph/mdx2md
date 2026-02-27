@@ -47,7 +47,7 @@ pub struct ComponentTransform {
     pub template: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct MarkdownRewrites {
     #[serde(default)]
     pub tables: Option<TableRewrite>,
@@ -55,8 +55,22 @@ pub struct MarkdownRewrites {
     pub links: Option<LinkRewrite>,
     #[serde(default)]
     pub images: Option<ImageRewrite>,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub strip_html_comments: bool,
+    #[serde(default = "default_true")]
+    pub strip_doctype: bool,
+}
+
+impl Default for MarkdownRewrites {
+    fn default() -> Self {
+        Self {
+            tables: None,
+            links: None,
+            images: None,
+            strip_html_comments: false,
+            strip_doctype: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
