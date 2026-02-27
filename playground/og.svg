@@ -1,0 +1,16 @@
+<svg width="1200" height="1200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="1200" fill="#0d1117"/>
+
+  <rect x="0" y="285" width="1200" height="4" fill="#58a6ff"/>
+
+  <text x="100" y="460" font-family="system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="72" font-weight="700" fill="#e6edf3">mdx2md</text>
+  <text x="100" y="530" font-family="system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="42" font-weight="400" fill="#8b949e">playground</text>
+
+  <text x="100" y="620" font-family="system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="28" fill="#8b949e">Convert MDX to clean, portable Markdown.</text>
+  <text x="100" y="658" font-family="system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="28" fill="#8b949e">Built in Rust, runs in the browser via WASM.</text>
+
+  <rect x="100" y="705" width="460" height="48" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="120" y="737" font-family="SF Mono, Fira Code, Consolas, monospace" font-size="20" fill="#58a6ff">&lt;Callout&gt;  --&gt;  &gt; blockquote</text>
+
+  <text x="850" y="640" font-family="system-ui, Helvetica, Arial, sans-serif" font-size="160" font-weight="700" fill="#161b22">.md</text>
+</svg>

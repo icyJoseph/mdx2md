@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <title>mdx2md · HTML → Markdown</title>
     <meta
       name="description"
@@ -495,7 +495,10 @@
       window.addEventListener("mousemove", (e) => {
         if (!dragging) return;
         const rect = configSection.parentElement.getBoundingClientRect();
-        const h = Math.max(48, Math.min(rect.height - 100, rect.bottom - e.clientY));
+        const h = Math.max(
+          48,
+          Math.min(rect.height - 100, rect.bottom - e.clientY),
+        );
         configSection.style.height = h + "px";
       });
 
