@@ -235,6 +235,11 @@ MDX source string
 
 The tokenizer and parser are built from scratch with no dependency on remark, unified, or any MDX/JSX parser. Layer 2 uses `pulldown-cmark` only to _locate_ elements by byte offset, then performs surgical string replacements to preserve formatting in untouched sections.
 
+### Spec and expected behavior
+
+- **MDX syntax** follows [mdxjs.com](https://mdxjs.com) and the [micromark MDX extensions](https://github.com/micromark/micromark-extension-mdx-jsx) (JSX, expressions, ESM). We accept the same inputs as valid MDX.
+- **MDX → Markdown behavior** is defined by this project’s **fixtures and config**: there is no official “MDX in → Markdown out” spec. The fixtures in `crates/mdx2md-core/tests/fixtures/` (e.g. `kitchen_sink`, `adversarial`, `esm_only`, `jsx_only`) plus their `.toml` and expected `.md` files are the regression suite. Pure Markdown compatibility is checked by running the [CommonMark spec](https://spec.commonmark.org/0.31.2/) examples through `convert()` with a passthrough config (no table/link rewrites) and asserting no panic.
+
 ### Dependencies
 
 | Crate                     | Purpose                                             |
