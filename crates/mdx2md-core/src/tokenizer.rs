@@ -249,9 +249,11 @@ fn consume_newline(s: &str) -> &str {
     }
 }
 
-/// Try to parse a JSX tag starting with `<`.
-/// Matches: `<Tag ...>`, `<Tag ... />`, `</Tag>`
-/// Does NOT match HTML-like lowercase tags or `<` used in comparisons.
+/// Try to parse a JSX/HTML tag starting with `<`.
+/// Matches: `<Tag ...>`, `<Tag ... />`, `</Tag>`, `<h1>`, `<br />`, etc.
+/// Tag names must start with an ASCII letter (upper or lowercase).
+/// Does NOT match `<!-- comments -->` (next char is `!`) or
+/// `<http://url>` autolinks (`:` is not a valid attribute/close position).
 fn try_parse_jsx_tag(s: &str) -> Option<(Token, &str)> {
     let bytes = s.as_bytes();
     if bytes.len() < 2 {
@@ -268,9 +270,8 @@ fn try_parse_jsx_tag(s: &str) -> Option<(Token, &str)> {
         return None;
     }
 
-    // Tag name must start with uppercase letter (JSX component convention)
     let first = bytes[pos];
-    if !first.is_ascii_uppercase() {
+    if !first.is_ascii_alphabetic() {
         return None;
     }
 
@@ -531,10 +532,50 @@ mod tests {
     }
 
     #[test]
-    fn test_lowercase_tags_are_not_jsx() {
-        let input = "Use `<div>` for layout.";
+    fn test_lowercase_tags_are_jsx() {
+        let input = "<div>hello</div>";
         let tokens = tokenize(input).unwrap();
-        // <div> should not be parsed as JSX since it starts with lowercase
+        assert!(matches!(&tokens[0], Token::JsxOpenTag { tag, self_closing: false, .. } if tag == "div"));
+        assert!(matches!(&tokens[1], Token::Markdown(s) if s == "hello"));
+        assert!(matches!(&tokens[2], Token::JsxCloseTag { tag } if tag == "div"));
+    }
+
+    #[test]
+    fn test_html_self_closing_tag() {
+        let input = "<br />";
+        let tokens = tokenize(input).unwrap();
+        assert_eq!(
+            tokens[0],
+            Token::JsxOpenTag {
+                tag: "br".to_string(),
+                attributes: vec![],
+                self_closing: true,
+            }
+        );
+    }
+
+    #[test]
+    fn test_html_tag_with_attributes() {
+        let input = r#"<a href="https://example.com">link</a>"#;
+        let tokens = tokenize(input).unwrap();
+        assert!(matches!(&tokens[0], Token::JsxOpenTag { tag, attributes, self_closing: false }
+            if tag == "a" && attributes.len() == 1 && attributes[0].name == "href"));
+        assert!(matches!(&tokens[1], Token::Markdown(s) if s == "link"));
+        assert!(matches!(&tokens[2], Token::JsxCloseTag { tag } if tag == "a"));
+    }
+
+    #[test]
+    fn test_html_comment_not_parsed_as_tag() {
+        let input = "<!-- this is a comment -->";
+        let tokens = tokenize(input).unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(&tokens[0], Token::Markdown(_)));
+    }
+
+    #[test]
+    fn test_autolink_not_parsed_as_tag() {
+        let input = "<http://example.com>";
+        let tokens = tokenize(input).unwrap();
         assert_eq!(tokens.len(), 1);
         assert!(matches!(&tokens[0], Token::Markdown(_)));
     }
