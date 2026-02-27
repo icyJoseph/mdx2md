@@ -2,11 +2,12 @@ use crate::config::*;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 /// Layer 2: Rewrite Markdown structure (tables -> lists, relative -> absolute links,
-/// strip links/images, filter by domain, remove HTML comments).
+/// strip links/images, filter by domain, remove HTML comments, strip DOCTYPE).
 /// Uses pulldown-cmark to locate elements, then does surgical string replacements
 /// to preserve formatting of everything we don't touch.
 pub fn rewrite_markdown(input: &str, config: &Config) -> String {
-    let result = strip_html_comments(input, config);
+    let result = strip_doctype(input, config);
+    let result = strip_html_comments(&result, config);
     let result = rewrite_links_and_images(&result, config);
     rewrite_tables(&result, config)
 }
@@ -126,6 +127,36 @@ fn extract_host(url: &str) -> String {
     };
     let without_port_and_path = without_auth.split('/').next().unwrap_or("");
     without_port_and_path.split(':').next().unwrap_or("").to_lowercase()
+}
+
+/// Remove `<!DOCTYPE ...>` lines from the input (case-insensitive).
+fn strip_doctype(input: &str, config: &Config) -> String {
+    if !config.markdown.strip_doctype {
+        return input.to_string();
+    }
+    const PAT: &[u8] = b"<!DOCTYPE";
+    let mut result = String::with_capacity(input.len());
+    let mut rest = input;
+    while rest.len() >= PAT.len() {
+        if let Some(start) = rest.as_bytes().windows(PAT.len()).position(|w| w.eq_ignore_ascii_case(PAT)) {
+            result.push_str(&rest[..start]);
+            let after_doctype = &rest[start..];
+            if let Some(end_in_line) = after_doctype.find('>') {
+                let after = start + end_in_line + 1;
+                rest = rest[after..].strip_prefix('\n').unwrap_or(&rest[after..]);
+            } else {
+                result.push_str(after_doctype);
+                break;
+            }
+        } else {
+            result.push_str(rest);
+            break;
+        }
+    }
+    if rest.len() < PAT.len() {
+        result.push_str(rest);
+    }
+    result
 }
 
 /// Remove HTML comments (`<!-- ... -->`) from the input.
@@ -658,6 +689,40 @@ See [docs](/guide) and ![img](/pic.png).
         let config = Config::default();
         let result = rewrite_markdown(input, &config);
         assert!(result.contains("<!-- comment -->"), "Should preserve comments when disabled");
+    }
+
+    // --- strip_doctype tests ---
+
+    #[test]
+    fn test_strip_doctype_default() {
+        let input = "<!DOCTYPE html>\n<html>\n";
+        let config = Config::default();
+        let result = rewrite_markdown(input, &config);
+        assert!(!result.contains("<!DOCTYPE"));
+        assert!(result.trim_start().starts_with("<html>"));
+    }
+
+    #[test]
+    fn test_strip_doctype_case_insensitive() {
+        let input = "<!doctype html>\n# Hi\n";
+        let config = Config::default();
+        let result = rewrite_markdown(input, &config);
+        assert!(!result.contains("doctype"));
+        assert!(result.trim_start().starts_with("# Hi"));
+    }
+
+    #[test]
+    fn test_strip_doctype_disabled() {
+        let input = "<!DOCTYPE html>\n<p>ok</p>\n";
+        let config = Config {
+            markdown: MarkdownRewrites {
+                strip_doctype: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let result = rewrite_markdown(input, &config);
+        assert!(result.contains("<!DOCTYPE html>"));
     }
 
     // --- extract_host / domain_allowed unit tests ---
