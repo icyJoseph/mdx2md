@@ -131,6 +131,52 @@ mod integration_tests {
         assert!(result.contains("/docs/quickstart"), "Should keep relative links");
     }
 
+    /// All fixtures that have .mdx + .toml + .md (expected). Run full pipeline and assert output matches.
+    const FIXTURE_NAMES: &[&str] = &[
+        "kitchen_sink",
+        "adversarial",
+        "esm_only",
+        "jsx_only",
+        "expressions_only",
+        "tables_links",
+    ];
+
+    #[test]
+    fn test_full_pipeline_all_fixtures() {
+        for name in FIXTURE_NAMES {
+            let input =
+                std::fs::read_to_string(fixture_path(&format!("{name}.mdx"))).unwrap_or_else(|e| {
+                    panic!("fixture {name}.mdx: {e}");
+                });
+            let toml_str =
+                std::fs::read_to_string(fixture_path(&format!("{name}.toml"))).unwrap_or_else(|e| {
+                    panic!("fixture {name}.toml: {e}");
+                });
+            let expected =
+                std::fs::read_to_string(fixture_path(&format!("{name}.md"))).unwrap_or_else(|e| {
+                    panic!("fixture {name}.md: {e}");
+                });
+            let config = Config::from_toml(&toml_str).unwrap();
+            let result = convert(&input, &config).unwrap();
+            let result_lines = normalize(&result);
+            let expected_lines = normalize(&expected);
+            assert_eq!(
+                result_lines,
+                expected_lines,
+                "fixture {name}: output does not match expected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_invalid_mdx_returns_error() {
+        // Unclosed JSX tag should cause parse error
+        let input = "Hello <Open> world";
+        let config = Config::default();
+        let result = convert(input, &config);
+        assert!(result.is_err(), "unclosed JSX should return Err");
+    }
+
     fn normalize(s: &str) -> Vec<String> {
         s.lines().map(|l| l.trim_end().to_string()).collect()
     }
