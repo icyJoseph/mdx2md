@@ -139,6 +139,11 @@ fn parse_options(options: &JsValue) -> Result<(Config, HashMap<String, Function>
             if let Some(v) = get_bool(&md_val, "stripHtmlComments") {
                 config.markdown.strip_html_comments = v;
             }
+
+            // DOCTYPE
+            if let Some(v) = get_bool(&md_val, "stripDoctype") {
+                config.markdown.strip_doctype = v;
+            }
         }
     }
 
