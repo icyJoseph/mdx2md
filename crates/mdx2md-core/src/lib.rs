@@ -131,6 +131,32 @@ mod integration_tests {
         assert!(result.contains("/docs/quickstart"), "Should keep relative links");
     }
 
+    #[test]
+    fn test_html_to_markdown_via_components() {
+        let input = "<h1>Hello</h1>\n<p>This is <strong>bold</strong> and <em>italic</em>.</p>";
+        let toml_config = r##"
+[components.h1]
+template = "# {children}\n"
+
+[components.p]
+template = "{children}\n"
+
+[components.strong]
+template = "**{children}**"
+
+[components.em]
+template = "*{children}*"
+
+[components._default]
+template = "{children}"
+"##;
+        let config = Config::from_toml(toml_config).unwrap();
+        let result = convert(input, &config).unwrap();
+        assert!(result.contains("# Hello"), "Expected '# Hello', got: {}", result);
+        assert!(result.contains("**bold**"), "Expected '**bold**', got: {}", result);
+        assert!(result.contains("*italic*"), "Expected '*italic*', got: {}", result);
+    }
+
     fn normalize(s: &str) -> Vec<String> {
         s.lines().map(|l| l.trim_end().to_string()).collect()
     }
