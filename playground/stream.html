@@ -325,6 +325,58 @@
         width: 0%;
       }
 
+      .url-bar {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 200px;
+      }
+
+      .url-bar.visible {
+        display: flex;
+      }
+
+      .url-bar input[type="text"] {
+        flex: 1;
+        font-size: 12px;
+        font-family: var(--font-mono);
+        background: var(--bg-input);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 5px 10px;
+        outline: none;
+      }
+
+      .url-bar input[type="text"]:focus {
+        border-color: var(--accent);
+      }
+
+      .url-bar input[type="text"]::placeholder {
+        color: var(--text-muted);
+      }
+
+      .url-bar .url-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+
+      .chunk-size-label {
+        display: none;
+      }
+
+      .chunk-size-label.visible {
+        display: flex;
+      }
+
+      .bytes-received {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+      }
+
       @media (max-width: 768px) {
         .panes {
           grid-template-columns: 1fr;
@@ -368,18 +420,37 @@
           <option value="react-nested">Nested Suspense (out-of-order)</option>
           <option value="static-chunked">Static HTML (chunked)</option>
           <option value="llm-tokens">LLM token stream (preview)</option>
+          <option value="fetch-url">Fetch URL</option>
+          <option value="paste-html">Paste HTML</option>
         </select>
       </label>
 
-      <label>
+      <div class="url-bar" id="url-bar">
+        <input type="text" id="url-input" placeholder="https://example.com" spellcheck="false" />
+        <span class="url-hint">streams via fetch</span>
+      </div>
+
+      <label id="speed-label">
         Speed
         <input type="range" id="speed" min="10" max="500" value="120" step="10" />
         <span class="speed-val" id="speed-val">120ms</span>
       </label>
 
+      <label class="chunk-size-label" id="chunk-size-label">
+        Chunk
+        <select id="chunk-size">
+          <option value="256">256 B</option>
+          <option value="1024">1 KB</option>
+          <option value="4096" selected>4 KB</option>
+          <option value="8192">8 KB</option>
+          <option value="0">Network chunks</option>
+        </select>
+      </label>
+
       <button class="btn btn-play" id="btn-play">&#9654; Play</button>
       <button class="btn btn-stop" id="btn-stop" style="display: none">&#9632; Stop</button>
       <button class="btn btn-reset" id="btn-reset">Reset</button>
+      <span class="bytes-received" id="bytes-received"></span>
     </div>
 
     <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
@@ -392,6 +463,14 @@
         </div>
         <div class="pane-body" id="chunks-pane">
           <div class="empty-state">Select a scenario and press Play</div>
+        </div>
+        <div class="pane-body" id="paste-pane" style="display: none">
+          <textarea
+            id="paste-input"
+            spellcheck="false"
+            placeholder="Paste HTML here, then press Play to simulate streaming it chunk by chunk..."
+            style="flex: 1; width: 100%; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; background: var(--bg-input); color: var(--text); border: none; resize: none; outline: none; tab-size: 2;"
+          ></textarea>
         </div>
       </div>
 
@@ -415,14 +494,40 @@
       const scenarioEl = document.getElementById("scenario");
       const speedEl = document.getElementById("speed");
       const speedValEl = document.getElementById("speed-val");
+      const speedLabel = document.getElementById("speed-label");
       const btnPlay = document.getElementById("btn-play");
       const btnStop = document.getElementById("btn-stop");
       const btnReset = document.getElementById("btn-reset");
       const progressEl = document.getElementById("progress");
       const chunksPane = document.getElementById("chunks-pane");
+      const pastePane = document.getElementById("paste-pane");
+      const pasteInput = document.getElementById("paste-input");
       const mdOutput = document.getElementById("md-output");
       const chunkCounter = document.getElementById("chunk-counter");
       const mdCounter = document.getElementById("md-counter");
+      const urlBar = document.getElementById("url-bar");
+      const urlInput = document.getElementById("url-input");
+      const chunkSizeLabel = document.getElementById("chunk-size-label");
+      const chunkSizeEl = document.getElementById("chunk-size");
+      const bytesReceived = document.getElementById("bytes-received");
+
+      // ── Scenario mode switching ────────────────────────────────
+
+      scenarioEl.addEventListener("change", () => {
+        const mode = scenarioEl.value;
+        const isFetch = mode === "fetch-url";
+        const isPaste = mode === "paste-html";
+        const isPreset = !isFetch && !isPaste;
+
+        urlBar.classList.toggle("visible", isFetch);
+        chunkSizeLabel.classList.toggle("visible", isFetch || isPaste);
+        speedLabel.style.display = isPreset ? "" : "none";
+        chunksPane.style.display = isPaste ? "none" : "";
+        pastePane.style.display = isPaste ? "" : "none";
+        bytesReceived.textContent = "";
+
+        btnPlay.textContent = isFetch ? "▶ Fetch" : "▶ Play";
+      });
 
       // ── Scenarios ──────────────────────────────────────────────
 
@@ -563,24 +668,46 @@
       function sleep(ms, signal) {
         return new Promise((resolve, reject) => {
           const timer = setTimeout(resolve, ms);
-          signal?.addEventListener("abort", () => {
-            clearTimeout(timer);
-            reject(new DOMException("Aborted", "AbortError"));
-          });
+          if (signal) {
+            signal.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(new DOMException("Aborted", "AbortError"));
+            }, { once: true });
+          }
         });
       }
 
-      async function play() {
-        const key = scenarioEl.value;
-        const scenario = SCENARIOS[key];
-        if (!scenario) return;
-
-        reset();
+      function startRun() {
         running = true;
         abortController = new AbortController();
         btnPlay.style.display = "none";
         btnStop.style.display = "";
         btnPlay.disabled = true;
+      }
+
+      function endRun() {
+        running = false;
+        btnPlay.style.display = "";
+        btnStop.style.display = "none";
+        btnPlay.disabled = false;
+      }
+
+      async function play() {
+        const mode = scenarioEl.value;
+        if (mode === "fetch-url") return playFetch();
+        if (mode === "paste-html") return playPaste();
+        return playPreset();
+      }
+
+      // ── Preset scenario playback ──────────────────────────────
+
+      async function playPreset() {
+        const key = scenarioEl.value;
+        const scenario = SCENARIOS[key];
+        if (!scenario) return;
+
+        reset();
+        startRun();
 
         const chunks = scenario.chunks;
         const converter = new StreamConverter(HTML_CONFIG);
@@ -593,45 +720,195 @@
             await sleep(parseInt(speedEl.value), abortController.signal);
 
             const chunk = chunks[i];
-
-            // Show chunk in left pane
-            const el = document.createElement("div");
-            el.className = `chunk-block ${classifyChunk(chunk)}`;
-            el.textContent = chunk;
-            chunksPane.appendChild(el);
-            el.scrollIntoView({ behavior: "smooth", block: "end" });
+            addChunkBlock(chunk);
 
             chunkCounter.textContent = `${i + 1} / ${chunks.length}`;
             progressEl.style.width = `${((i + 1) / chunks.length) * 100}%`;
 
-            // Feed to converter
             converter.push(chunk);
-            const drained = converter.drain();
-
-            for (const piece of drained) {
-              if (piece.content.trim()) {
-                appendMd(piece.content, piece.fromBoundary);
-                mdPieces++;
-              }
-            }
-            mdCounter.textContent = `${mdPieces} piece${mdPieces !== 1 ? "s" : ""}`;
+            mdPieces = drainAndAppend(converter, mdPieces);
           }
 
-          // Finish
-          const final_ = converter.finish();
-          if (final_ && final_.content && final_.content.trim()) {
-            appendMd(final_.content, final_.fromBoundary);
-            mdPieces++;
-            mdCounter.textContent = `${mdPieces} piece${mdPieces !== 1 ? "s" : ""}`;
-          }
+          mdPieces = finishAndAppend(converter, mdPieces);
         } catch (e) {
           if (e.name !== "AbortError") throw e;
         } finally {
-          running = false;
-          btnPlay.style.display = "";
-          btnStop.style.display = "none";
-          btnPlay.disabled = false;
+          endRun();
         }
+      }
+
+      // ── Fetch URL streaming ────────────────────────────────────
+
+      async function playFetch() {
+        const url = urlInput.value.trim();
+        if (!url) { urlInput.focus(); return; }
+
+        reset();
+        startRun();
+
+        const chunkSize = parseInt(chunkSizeEl.value);
+        const converter = new StreamConverter(HTML_CONFIG);
+        let mdPieces = 0;
+        let totalBytes = 0;
+        let chunkCount = 0;
+
+        try {
+          const resp = await fetch(url, { signal: abortController.signal });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value, { stream: true });
+            totalBytes += value.byteLength;
+
+            if (chunkSize === 0) {
+              // Use network chunks as-is
+              chunkCount++;
+              addChunkBlock(text);
+              chunkCounter.textContent = `${chunkCount} chunks`;
+              bytesReceived.textContent = formatBytes(totalBytes);
+
+              converter.push(text);
+              mdPieces = drainAndAppend(converter, mdPieces);
+            } else {
+              // Re-chunk to fixed size for visibility
+              buffer += text;
+              while (buffer.length >= chunkSize) {
+                const piece = buffer.slice(0, chunkSize);
+                buffer = buffer.slice(chunkSize);
+                chunkCount++;
+                addChunkBlock(piece);
+                chunkCounter.textContent = `${chunkCount} chunks`;
+                bytesReceived.textContent = formatBytes(totalBytes);
+
+                converter.push(piece);
+                mdPieces = drainAndAppend(converter, mdPieces);
+
+                // Yield to keep UI responsive
+                await sleep(1, abortController.signal);
+              }
+            }
+          }
+
+          // Flush remaining buffer
+          if (buffer.length > 0) {
+            chunkCount++;
+            addChunkBlock(buffer);
+            chunkCounter.textContent = `${chunkCount} chunks`;
+            converter.push(buffer);
+            mdPieces = drainAndAppend(converter, mdPieces);
+          }
+
+          bytesReceived.textContent = formatBytes(totalBytes) + " (done)";
+          progressEl.style.width = "100%";
+          mdPieces = finishAndAppend(converter, mdPieces);
+        } catch (e) {
+          if (e.name === "AbortError") return;
+          const el = document.createElement("div");
+          el.className = "chunk-block marker-chunk";
+          el.textContent = `Error: ${e.message}`;
+          chunksPane.appendChild(el);
+        } finally {
+          endRun();
+        }
+      }
+
+      // ── Paste HTML playback ────────────────────────────────────
+
+      async function playPaste() {
+        const html = pasteInput.value;
+        if (!html.trim()) { pasteInput.focus(); return; }
+
+        // Switch to chunk view for output
+        chunksPane.style.display = "";
+        pastePane.style.display = "none";
+        chunksPane.innerHTML = "";
+        mdOutput.innerHTML = '<span class="empty-state">Waiting for chunks...</span>';
+        chunkCounter.textContent = "0 / 0";
+        mdCounter.textContent = "0 pieces";
+        progressEl.style.width = "0%";
+
+        startRun();
+
+        const chunkSize = parseInt(chunkSizeEl.value) || 4096;
+        const converter = new StreamConverter(HTML_CONFIG);
+        let mdPieces = 0;
+
+        // Split into chunks
+        const chunks = [];
+        for (let i = 0; i < html.length; i += chunkSize) {
+          chunks.push(html.slice(i, i + chunkSize));
+        }
+
+        chunkCounter.textContent = `0 / ${chunks.length}`;
+
+        try {
+          for (let i = 0; i < chunks.length; i++) {
+            await sleep(30, abortController.signal);
+
+            addChunkBlock(chunks[i]);
+            chunkCounter.textContent = `${i + 1} / ${chunks.length}`;
+            progressEl.style.width = `${((i + 1) / chunks.length) * 100}%`;
+
+            converter.push(chunks[i]);
+            mdPieces = drainAndAppend(converter, mdPieces);
+          }
+
+          mdPieces = finishAndAppend(converter, mdPieces);
+        } catch (e) {
+          if (e.name !== "AbortError") throw e;
+        } finally {
+          endRun();
+        }
+      }
+
+      // ── Shared helpers ─────────────────────────────────────────
+
+      function addChunkBlock(text) {
+        const empty = chunksPane.querySelector(".empty-state");
+        if (empty) empty.remove();
+
+        const el = document.createElement("div");
+        el.className = `chunk-block ${classifyChunk(text)}`;
+        el.textContent = text.length > 2000
+          ? text.slice(0, 2000) + `\n… (${text.length} chars total)`
+          : text;
+        chunksPane.appendChild(el);
+        el.scrollIntoView({ behavior: "smooth", block: "end" });
+      }
+
+      function drainAndAppend(converter, mdPieces) {
+        const drained = converter.drain();
+        for (const piece of drained) {
+          if (piece.content.trim()) {
+            appendMd(piece.content, piece.fromBoundary);
+            mdPieces++;
+          }
+        }
+        mdCounter.textContent = `${mdPieces} piece${mdPieces !== 1 ? "s" : ""}`;
+        return mdPieces;
+      }
+
+      function finishAndAppend(converter, mdPieces) {
+        const final_ = converter.finish();
+        if (final_ && final_.content && final_.content.trim()) {
+          appendMd(final_.content, final_.fromBoundary);
+          mdPieces++;
+          mdCounter.textContent = `${mdPieces} piece${mdPieces !== 1 ? "s" : ""}`;
+        }
+        return mdPieces;
+      }
+
+      function formatBytes(b) {
+        if (b < 1024) return b + " B";
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+        return (b / (1024 * 1024)).toFixed(2) + " MB";
       }
 
       function appendMd(content, fromBoundary) {
@@ -652,11 +929,17 @@
 
       function reset() {
         stop();
+        const mode = scenarioEl.value;
+        const isPaste = mode === "paste-html";
+
         chunksPane.innerHTML = '<div class="empty-state">Select a scenario and press Play</div>';
+        chunksPane.style.display = isPaste ? "none" : "";
+        pastePane.style.display = isPaste ? "" : "none";
         mdOutput.innerHTML = '<span class="empty-state">Waiting for chunks...</span>';
         chunkCounter.textContent = "0 / 0";
         mdCounter.textContent = "0 pieces";
         progressEl.style.width = "0%";
+        bytesReceived.textContent = "";
       }
 
       // ── Wire up buttons ────────────────────────────────────────
