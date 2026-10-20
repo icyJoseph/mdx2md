@@ -49,6 +49,24 @@
     - CLI: `--stream` should auto-detect React markers vs raw text, or add a
       `--stream-mode=react|text|auto` flag.
 
+- **Markdown ↔ HTML round-trip / progressive serving**
+  - The MDX → Markdown → HTML cycle is semantically idempotent: mdx2md strips
+    runtime concerns (JSX, expressions, React) but preserves content. This means
+    the tool can sit at the interchange point between all three formats.
+  - **`text/markdown` responses** ([RFC 7763](https://datatracker.ietf.org/doc/html/rfc7763)):
+    serve Markdown natively from any SSR app. A middleware/proxy could
+    content-negotiate via `Accept: text/markdown` and pipe the HTML stream
+    through `StreamConverter` → emit `text/markdown; variant=CommonMark`.
+  - **Progressive Markdown rendering**: stream Markdown chunks via SSE
+    (`text/event-stream`) or chunked transfer encoding. Each chunk is valid
+    Markdown that the client can render immediately. Pairs with
+    `TextStreamConverter` to ensure chunks break at safe syntax points.
+  - **Clean HTML proxy**: `curl site.com | mdx2md --stream | md-to-html` for
+    zero-JS static HTML — useful for RSS feeds, email digests, archival,
+    search indexing, and accessibility.
+  - **LLM context pipe**: stream a live site into an LLM context window as
+    clean Markdown, progressively, without waiting for full page load.
+
 - **WASM bindings**
   - Revisit `JsComponentResolver::resolve`’s use of `func.call1(&JsValue::NULL, ...)`:
     if component callbacks ever need a non-null `this`, adjust to pass a more
