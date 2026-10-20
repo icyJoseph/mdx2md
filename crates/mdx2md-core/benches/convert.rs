@@ -2,11 +2,14 @@
 //! Run with: cargo bench -p mdx2md-core
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mdx2md_core::{convert, config::Config};
+use mdx2md_core::{config::Config, convert};
 use std::path::PathBuf;
 
 fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
 }
 
 fn kitchen_sink_input() -> (String, Config) {
@@ -47,7 +50,8 @@ fn bench_convert_large_mdx(c: &mut Criterion) {
 /// Passthrough (default config) on a long pure-Markdown string to measure Layer 2 overhead.
 fn bench_convert_commonmark_identity(c: &mut Criterion) {
     let config = Config::default();
-    let markdown: String = "# Title\n\nParagraph one.\n\nParagraph two with **bold** and *italic*.\n\n".repeat(500);
+    let markdown: String =
+        "# Title\n\nParagraph one.\n\nParagraph two with **bold** and *italic*.\n\n".repeat(500);
     c.bench_function("convert_commonmark_identity", |b| {
         b.iter(|| {
             let _ = black_box(convert(black_box(&markdown), black_box(&config)).unwrap());

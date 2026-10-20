@@ -83,13 +83,8 @@ fn main() {
             for file in &files {
                 let input = read_file(file);
                 let result = convert_or_exit(&input, &config, &file.display().to_string());
-                let out_name = file
-                    .file_stem()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string()
-                    + "."
-                    + &cli.ext;
+                let out_name =
+                    file.file_stem().unwrap().to_string_lossy().to_string() + "." + &cli.ext;
                 let out_path = out_dir.join(out_name);
                 std::fs::write(&out_path, &result).unwrap_or_else(|e| {
                     eprintln!("Error writing {}: {e}", out_path.display());
@@ -113,12 +108,10 @@ fn stream_stdin(config: &Config, output: Option<&Path>) {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).ok();
             }
-            Box::new(
-                std::fs::File::create(path).unwrap_or_else(|e| {
-                    eprintln!("Error creating {}: {e}", path.display());
-                    std::process::exit(1);
-                }),
-            )
+            Box::new(std::fs::File::create(path).unwrap_or_else(|e| {
+                eprintln!("Error creating {}: {e}", path.display());
+                std::process::exit(1);
+            }))
         }
         None => Box::new(io::stdout()),
     };
@@ -143,10 +136,11 @@ fn stream_stdin(config: &Config, output: Option<&Path>) {
     }
 
     if let Some(final_chunk) = converter.finish() {
-        out.write_all(final_chunk.content.as_bytes()).unwrap_or_else(|e| {
-            eprintln!("Error writing: {e}");
-            std::process::exit(1);
-        });
+        out.write_all(final_chunk.content.as_bytes())
+            .unwrap_or_else(|e| {
+                eprintln!("Error writing: {e}");
+                std::process::exit(1);
+            });
     }
 }
 
@@ -176,10 +170,12 @@ fn write_output(content: &str, output: Option<&Path>) {
             });
         }
         None => {
-            io::stdout().write_all(content.as_bytes()).unwrap_or_else(|e| {
-                eprintln!("Error writing stdout: {e}");
-                std::process::exit(1);
-            });
+            io::stdout()
+                .write_all(content.as_bytes())
+                .unwrap_or_else(|e| {
+                    eprintln!("Error writing stdout: {e}");
+                    std::process::exit(1);
+                });
         }
     }
 }

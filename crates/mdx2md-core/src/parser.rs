@@ -64,7 +64,9 @@ impl Parser {
                         });
                     }
                     return Err(ParseError {
-                        message: format!("Unexpected closing tag </{tag}> with no matching open tag"),
+                        message: format!(
+                            "Unexpected closing tag </{tag}> with no matching open tag"
+                        ),
                     });
                 }
                 _ => {
@@ -140,14 +142,15 @@ mod tests {
     use crate::tokenizer::tokenize;
 
     fn parse_str(input: &str) -> Result<MdxDocument, ParseError> {
-        let tokens = tokenize(input).map_err(|e| ParseError {
-            message: e.message,
-        })?;
+        let tokens = tokenize(input).map_err(|e| ParseError { message: e.message })?;
         parse(tokens)
     }
 
     fn fixture_path(name: &str) -> std::path::PathBuf {
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join(name)
     }
 
     #[test]
@@ -221,7 +224,9 @@ mod tests {
                 assert_eq!(children.len(), 1);
                 match &children[0] {
                     MdxNode::JsxElement {
-                        tag, children: inner_children, ..
+                        tag,
+                        children: inner_children,
+                        ..
                     } => {
                         assert_eq!(tag, "Inner");
                         assert_eq!(inner_children.len(), 1);
@@ -293,9 +298,9 @@ mod tests {
                 MdxNode::JsxElement { tag, children, .. } if tag == "Callout" => {
                     found_callout = true;
                     // Callout should contain nested CodeBlock
-                    let has_codeblock = children.iter().any(|c| {
-                        matches!(c, MdxNode::JsxElement { tag, .. } if tag == "CodeBlock")
-                    });
+                    let has_codeblock = children.iter().any(
+                        |c| matches!(c, MdxNode::JsxElement { tag, .. } if tag == "CodeBlock"),
+                    );
                     assert!(has_codeblock, "Callout should contain nested CodeBlock");
                 }
                 _ => {}

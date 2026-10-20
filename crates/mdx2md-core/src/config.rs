@@ -132,7 +132,10 @@ mod tests {
     use std::path::PathBuf;
 
     fn fixture_path(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join(name)
     }
 
     #[test]
@@ -142,7 +145,10 @@ mod tests {
 
         assert!(config.options.strip_imports);
         assert!(config.options.strip_exports);
-        assert_eq!(config.options.expression_handling, ExpressionHandling::Strip);
+        assert_eq!(
+            config.options.expression_handling,
+            ExpressionHandling::Strip
+        );
         assert!(config.options.preserve_frontmatter);
 
         assert!(config.components.contains_key("Callout"));

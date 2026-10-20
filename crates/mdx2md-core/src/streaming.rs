@@ -303,9 +303,9 @@ impl StreamConverter {
             let first = &self.boundary_order[0];
             if let Some(b) = self.boundaries.get(first) {
                 // Find the start of the boundary marker in the buffer
-                let marker = format!("<!--$?-->");
-                if let Some(marker_pos) = self.buffer[self.emitted_up_to..b.fallback_start]
-                    .rfind(&marker)
+                let marker = "<!--$?-->".to_string();
+                if let Some(marker_pos) =
+                    self.buffer[self.emitted_up_to..b.fallback_start].rfind(&marker)
                 {
                     let abs_pos = self.emitted_up_to + marker_pos;
                     if abs_pos > self.emitted_up_to {
@@ -329,11 +329,7 @@ impl StreamConverter {
         let top_level: Vec<String> = self
             .boundary_order
             .iter()
-            .filter(|id| {
-                self.boundaries
-                    .get(*id)
-                    .is_some_and(|b| b.parent.is_none())
-            })
+            .filter(|id| self.boundaries.get(*id).is_some_and(|b| b.parent.is_none()))
             .cloned()
             .collect();
 
@@ -382,11 +378,7 @@ impl StreamConverter {
         let Some(b) = self.boundaries.get(bid) else {
             return String::new();
         };
-        let mut html = b
-            .resolved_content
-            .as_deref()
-            .unwrap_or("")
-            .to_string();
+        let mut html = b.resolved_content.as_deref().unwrap_or("").to_string();
 
         // Recursively replace child boundaries within this content
         for child_id in &b.children {
@@ -493,10 +485,10 @@ impl StreamConverter {
         let prefix_dq = "<template id=\"";
         let prefix_sq = "<template id='";
 
-        let (after, quote) = if rest.starts_with(prefix_dq) {
-            (&rest[prefix_dq.len()..], b'"')
-        } else if rest.starts_with(prefix_sq) {
-            (&rest[prefix_sq.len()..], b'\'')
+        let (after, quote) = if let Some(stripped) = rest.strip_prefix(prefix_dq) {
+            (stripped, b'"')
+        } else if let Some(stripped) = rest.strip_prefix(prefix_sq) {
+            (stripped, b'\'')
         } else {
             return None;
         };
@@ -516,10 +508,8 @@ impl StreamConverter {
         let rest = &self.buffer[pos..];
         if let Some(offset) = rest.find("</template>") {
             Some(pos + offset + "</template>".len())
-        } else if let Some(offset) = rest.find("/>") {
-            Some(pos + offset + "/>".len())
         } else {
-            None
+            rest.find("/>").map(|offset| pos + offset + "/>".len())
         }
     }
 
@@ -794,9 +784,7 @@ mod tests {
     fn test_finish_uses_fallback_for_unresolved() {
         let mut conv = StreamConverter::new(default_config());
 
-        conv.push(
-            r#"<!--$?--><template id="B:0"></template><p>Fallback content</p><!--/$-->"#,
-        );
+        conv.push(r#"<!--$?--><template id="B:0"></template><p>Fallback content</p><!--/$-->"#);
 
         // Never resolve — finish() should use fallback
         let _ = conv.drain();
@@ -814,10 +802,7 @@ mod tests {
         let mut conv = StreamConverter::new(default_config());
         conv.buffer = r#"$RC("B:0","S:0")"#.to_string();
         let result = conv.extract_rc_call(0);
-        assert_eq!(
-            result,
-            Some(("B:0".to_string(), "S:0".to_string(), 16))
-        );
+        assert_eq!(result, Some(("B:0".to_string(), "S:0".to_string(), 16)));
     }
 
     #[test]
@@ -825,10 +810,7 @@ mod tests {
         let mut conv = StreamConverter::new(default_config());
         conv.buffer = "$RC('B:2','S:2')".to_string();
         let result = conv.extract_rc_call(0);
-        assert_eq!(
-            result,
-            Some(("B:2".to_string(), "S:2".to_string(), 16))
-        );
+        assert_eq!(result, Some(("B:2".to_string(), "S:2".to_string(), 16)));
     }
 
     #[test]
@@ -865,10 +847,7 @@ mod tests {
     #[test]
     fn test_find_matching_div_close() {
         assert_eq!(find_matching_div_close("<p>simple</p></div>"), Some(13));
-        assert_eq!(
-            find_matching_div_close("<div>nested</div></div>"),
-            Some(17)
-        );
+        assert_eq!(find_matching_div_close("<div>nested</div></div>"), Some(17));
         assert_eq!(find_matching_div_close("no close tag"), None);
     }
 

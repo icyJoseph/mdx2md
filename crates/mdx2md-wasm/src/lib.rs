@@ -18,8 +18,7 @@ pub fn convert(mdx: &str, options: JsValue) -> Result<String, JsError> {
         let resolver = JsComponentResolver {
             callbacks: js_resolvers,
         };
-        mdx2md_core::convert_with_resolver(mdx, &config, &resolver)
-            .map_err(|e| JsError::new(&e.0))
+        mdx2md_core::convert_with_resolver(mdx, &config, &resolver).map_err(|e| JsError::new(&e.0))
     }
 }
 
@@ -34,11 +33,19 @@ impl ComponentResolver for JsComponentResolver {
         props: &HashMap<String, String>,
         children: &str,
     ) -> Option<String> {
-        let func = self.callbacks.get(tag).or_else(|| self.callbacks.get("_default"))?;
+        let func = self
+            .callbacks
+            .get(tag)
+            .or_else(|| self.callbacks.get("_default"))?;
 
         let js_props = Object::new();
         for (key, value) in props {
-            Reflect::set(&js_props, &JsValue::from_str(key), &JsValue::from_str(value)).ok();
+            Reflect::set(
+                &js_props,
+                &JsValue::from_str(key),
+                &JsValue::from_str(value),
+            )
+            .ok();
         }
         Reflect::set(
             &js_props,
@@ -87,10 +94,9 @@ fn parse_options(options: &JsValue) -> Result<(Config, HashMap<String, Function>
                 let val = Reflect::get(&components_obj, &key).unwrap_or(JsValue::UNDEFINED);
 
                 if let Some(template) = val.as_string() {
-                    config.components.insert(
-                        key_str,
-                        ComponentTransform { template },
-                    );
+                    config
+                        .components
+                        .insert(key_str, ComponentTransform { template });
                 } else if val.is_function() {
                     let func: Function = val.unchecked_into();
                     js_resolvers.insert(key_str, func);
