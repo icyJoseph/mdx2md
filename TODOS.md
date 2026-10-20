@@ -27,21 +27,27 @@
     summary like `N/M files failed` before exiting with non-zero status.
 
 - **Streaming / partial input support**
-  - Support converting MDX/HTML from a chunked stream (e.g. React SSR with
-    Suspense) rather than requiring the full document up front.
-  - Buffer at Suspense boundaries: React's out-of-order streaming emits
-    fallback content first, then delivers resolved content later via
-    `<template id="B:...">` chunks and `$RC`/`$RS` replacement scripts.
-    The converter should hold partial output until a boundary is fully
-    revealed before emitting its Markdown.
-  - Handle out-of-order resolution: a deeply nested Suspense boundary can
-    resolve before a shallower one. The buffer/reveal logic needs to track
-    a tree of pending boundaries rather than assuming FIFO order.
-  - Decide on the output API: `Stream<Item = MarkdownChunk>` that yields
-    stable Markdown segments as boundaries resolve, vs accumulating
-    everything and returning once complete. The streaming variant is more
-    useful for real-time pipelines (e.g. feeding an LLM context window
-    as content loads).
+  - ~~React SSR with Suspense: `StreamConverter` handles `<!--$?-->` boundaries,
+    `<template id="B:X">`, `$RC` swap scripts, and out-of-order resolution.~~
+    ✅ Done — `streaming.rs` + `--stream` CLI flag.
+  - **LLM / raw text streaming**: tokens arrive mid-syntax (e.g. `**bol` then
+    `d**`, or `<div cl` then `ass="x">`). Need a `TextStreamConverter` that:
+    - Buffers incoming tokens until a "safe emit point" is reached.
+    - Safe points: end of a complete paragraph (`\n\n`), closed inline syntax
+      (`**...**`, `*...*`, `` `...` ``), closed HTML/JSX tag, closed link
+      `[text](url)`, end of a fenced code block.
+    - Tracks open syntax depth: unclosed `**`, `*`, `` ` ``, `[`, `<Tag>`.
+      Only emits buffered content when all openers are closed or a paragraph
+      boundary is reached.
+    - Handles the ambiguity of `*` (could be list item OR italic opener) by
+      looking at context (start of line vs inline).
+    - Timeout / force-flush: if no safe point is reached after N bytes or
+      T milliseconds, emit what we have (best-effort) so the consumer isn't
+      starved. The next chunk can re-parse if needed.
+    - Composable with `StreamConverter`: LLM stream → `TextStreamConverter`
+      (stabilizes syntax) → `StreamConverter` (resolves Suspense) → Markdown.
+    - CLI: `--stream` should auto-detect React markers vs raw text, or add a
+      `--stream-mode=react|text|auto` flag.
 
 - **WASM bindings**
   - Revisit `JsComponentResolver::resolve`’s use of `func.call1(&JsValue::NULL, ...)`:
