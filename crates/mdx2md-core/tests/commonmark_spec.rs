@@ -7,6 +7,22 @@
 use mdx2md_core::{convert, config::Config};
 use std::path::PathBuf;
 
+/// Matches content that looks like an HTML/JSX tag or autolink (e.g. `<div`, `</p`, `<!`, `<http`)
+/// but not bare `>` used for blockquotes.
+fn contains_html_like(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    for i in 0..bytes.len() {
+        if bytes[i] == b'<' {
+            if let Some(&next) = bytes.get(i + 1) {
+                if next.is_ascii_alphabetic() || next == b'/' || next == b'!' || next == b'?' {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn spec_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("commonmark_spec.json")
 }
@@ -19,11 +35,10 @@ fn commonmark_spec_passthrough_no_panic() {
     let config = Config::default();
 
     for (i, ex) in examples.iter().enumerate() {
-        // Skip examples that exercise HTML/inline HTML which can legitimately
-        // be parsed as JSX/HTML by the MDX-aware tokenizer (e.g. "<a>" tests
-        // in the "Backslash escapes" section). Those are out of scope for the
-        // "pure Markdown passthrough" check here.
-        if ex.markdown.contains('<') || ex.markdown.contains('>') {
+        // Skip examples containing HTML-like tags (e.g. `<div>`, `</p>`, `<!DOCTYPE`)
+        // which the MDX-aware tokenizer legitimately parses as JSX/HTML.
+        // Bare `>` (blockquotes) and non-tag `<` (comparisons) are fine to test.
+        if contains_html_like(&ex.markdown) {
             continue;
         }
 

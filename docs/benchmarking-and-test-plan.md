@@ -33,7 +33,6 @@ What we benchmark against, which suites we use, how to rerun them, and current p
 **How to run:**
 
 ```bash
-cd worktree-benchmarking
 cargo test -p mdx2md-core commonmark_spec_passthrough_no_panic
 
 # Optional, stricter identity check:
@@ -112,7 +111,6 @@ All fixture-based tests use a shared `fixture_path(name)` helper based on `env!(
 **How to run:**
 
 ```bash
-cd worktree-benchmarking
 cargo bench -p mdx2md-core
 ```
 

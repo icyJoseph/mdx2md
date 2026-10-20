@@ -12,14 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ROOT = path.resolve(__dirname, "..", "..");
-const FIXTURES = path.join(
-  ROOT,
-  "worktree-benchmarking",
-  "crates",
-  "mdx2md-core",
-  "tests",
-  "fixtures",
-);
+const FIXTURES = path.join(ROOT, "crates", "mdx2md-core", "tests", "fixtures");
 
 async function loadFixture(name) {
   return fs.readFile(path.join(FIXTURES, name), "utf8");
