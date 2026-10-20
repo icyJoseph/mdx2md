@@ -22,6 +22,11 @@ struct Cli {
     /// File extension for output files in directory mode (default: "md").
     #[arg(long, default_value = "md")]
     ext: String,
+
+    /// Stream mode: read chunked HTML from stdin (e.g. React SSR with Suspense)
+    /// and emit Markdown as Suspense boundaries resolve.
+    #[arg(long)]
+    stream: bool,
 }
 
 fn main() {
@@ -40,6 +45,11 @@ fn main() {
         }
         None => Config::default(),
     };
+
+    if cli.stream {
+        stream_stdin(&config, cli.output.as_deref());
+        return;
+    }
 
     if cli.input.is_empty() {
         // Stdin mode
@@ -88,6 +98,55 @@ fn main() {
                 eprintln!("{} -> {}", file.display(), out_path.display());
             }
         }
+    }
+}
+
+fn stream_stdin(config: &Config, output: Option<&Path>) {
+    use mdx2md_core::streaming::StreamConverter;
+
+    let mut converter = StreamConverter::new(config.clone());
+    let stdin = io::stdin();
+    let mut buf = [0u8; 8192];
+
+    let mut out: Box<dyn Write> = match output {
+        Some(path) => {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            Box::new(
+                std::fs::File::create(path).unwrap_or_else(|e| {
+                    eprintln!("Error creating {}: {e}", path.display());
+                    std::process::exit(1);
+                }),
+            )
+        }
+        None => Box::new(io::stdout()),
+    };
+
+    loop {
+        let n = stdin.lock().read(&mut buf).unwrap_or_else(|e| {
+            eprintln!("Error reading stdin: {e}");
+            std::process::exit(1);
+        });
+        if n == 0 {
+            break;
+        }
+        let chunk = String::from_utf8_lossy(&buf[..n]);
+        converter.push(&chunk);
+        for md in converter.drain() {
+            out.write_all(md.content.as_bytes()).unwrap_or_else(|e| {
+                eprintln!("Error writing: {e}");
+                std::process::exit(1);
+            });
+            out.flush().ok();
+        }
+    }
+
+    if let Some(final_chunk) = converter.finish() {
+        out.write_all(final_chunk.content.as_bytes()).unwrap_or_else(|e| {
+            eprintln!("Error writing: {e}");
+            std::process::exit(1);
+        });
     }
 }
 

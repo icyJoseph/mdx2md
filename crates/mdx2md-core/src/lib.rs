@@ -2,6 +2,7 @@ pub mod ast;
 pub mod config;
 pub mod parser;
 pub mod rewriter;
+pub mod streaming;
 pub mod tokenizer;
 pub mod transform;
 
