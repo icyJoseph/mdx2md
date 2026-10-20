@@ -302,24 +302,26 @@ impl StreamConverter {
         if !self.boundary_order.is_empty() {
             let first = &self.boundary_order[0];
             if let Some(b) = self.boundaries.get(first) {
-                // Find the start of the boundary marker in the buffer
-                let marker = "<!--$?-->".to_string();
-                if let Some(marker_pos) =
-                    self.buffer[self.emitted_up_to..b.fallback_start].rfind(&marker)
-                {
-                    let abs_pos = self.emitted_up_to + marker_pos;
-                    if abs_pos > self.emitted_up_to {
-                        let static_html = &self.buffer[self.emitted_up_to..abs_pos];
-                        if !static_html.trim().is_empty() {
-                            let md = self.html_to_markdown(static_html);
-                            if !md.trim().is_empty() {
-                                self.pending_output.push(MarkdownChunk {
-                                    content: md,
-                                    from_boundary: false,
-                                });
+                // Only search if we haven't already emitted past the fallback start
+                if self.emitted_up_to < b.fallback_start {
+                    let marker = "<!--$?-->";
+                    if let Some(marker_pos) =
+                        self.buffer[self.emitted_up_to..b.fallback_start].rfind(marker)
+                    {
+                        let abs_pos = self.emitted_up_to + marker_pos;
+                        if abs_pos > self.emitted_up_to {
+                            let static_html = &self.buffer[self.emitted_up_to..abs_pos];
+                            if !static_html.trim().is_empty() {
+                                let md = self.html_to_markdown(static_html);
+                                if !md.trim().is_empty() {
+                                    self.pending_output.push(MarkdownChunk {
+                                        content: md,
+                                        from_boundary: false,
+                                    });
+                                }
                             }
+                            self.emitted_up_to = abs_pos;
                         }
-                        self.emitted_up_to = abs_pos;
                     }
                 }
             }
@@ -425,10 +427,19 @@ impl StreamConverter {
             }
         }
 
-        // Remove <div hidden id="S:X">...</div> blocks
+        // Remove <div hidden id="S:X">...</div> blocks (handling nested divs)
         while let Some(start) = html.find("<div hidden id=") {
-            if let Some(end) = html[start..].find("</div>") {
-                html.replace_range(start..start + end + "</div>".len(), "");
+            // Find the closing `>` of the opening tag
+            if let Some(tag_end) = html[start..].find('>') {
+                let content_start = start + tag_end + 1;
+                if let Some(close_offset) = find_matching_div_close(&html[content_start..]) {
+                    let block_end = content_start + close_offset + "</div>".len();
+                    html.replace_range(start..block_end, "");
+                } else {
+                    // No matching close; remove from start to end of string
+                    html.truncate(start);
+                    break;
+                }
             } else {
                 break;
             }
@@ -578,9 +589,8 @@ impl StreamConverter {
 fn find_matching_div_close(s: &str) -> Option<usize> {
     let mut depth = 0i32;
     let mut pos = 0;
-    let bytes = s.as_bytes();
 
-    while pos < bytes.len() {
+    while pos < s.len() {
         if s[pos..].starts_with("</div>") {
             if depth == 0 {
                 return Some(pos);
@@ -590,19 +600,18 @@ fn find_matching_div_close(s: &str) -> Option<usize> {
         } else if s[pos..].starts_with("<div") {
             // Check it's actually a div tag (not `<divider>` etc.)
             let after = pos + 4;
-            if after < bytes.len()
-                && (bytes[after] == b' '
-                    || bytes[after] == b'>'
-                    || bytes[after] == b'/'
-                    || bytes[after] == b'\n')
-            {
-                depth += 1;
-                pos += 4;
-            } else {
-                pos += 1;
+            if after < s.len() {
+                let next = s.as_bytes()[after];
+                if next == b' ' || next == b'>' || next == b'/' || next == b'\n' {
+                    depth += 1;
+                    pos += 4;
+                    continue;
+                }
             }
+            // Advance by one UTF-8 character
+            pos += s[pos..].chars().next().map_or(1, |c| c.len_utf8());
         } else {
-            pos += 1;
+            pos += s[pos..].chars().next().map_or(1, |c| c.len_utf8());
         }
     }
     None

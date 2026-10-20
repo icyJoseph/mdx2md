@@ -426,8 +426,15 @@
       </label>
 
       <div class="url-bar" id="url-bar">
+        <select id="url-presets" style="font-size: 12px; background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px;">
+          <option value="">Custom URL…</option>
+          <option value="http://localhost:3001">localhost:3001 (test server)</option>
+          <option value="https://nextjs.org">nextjs.org</option>
+          <option value="https://react.dev">react.dev</option>
+          <option value="https://vercel.com">vercel.com</option>
+        </select>
         <input type="text" id="url-input" placeholder="https://example.com" spellcheck="false" />
-        <span class="url-hint">streams via fetch</span>
+        <span class="url-hint" id="url-hint">streams via fetch</span>
       </div>
 
       <label id="speed-label">
@@ -507,6 +514,8 @@
       const mdCounter = document.getElementById("md-counter");
       const urlBar = document.getElementById("url-bar");
       const urlInput = document.getElementById("url-input");
+      const urlPresets = document.getElementById("url-presets");
+      const urlHint = document.getElementById("url-hint");
       const chunkSizeLabel = document.getElementById("chunk-size-label");
       const chunkSizeEl = document.getElementById("chunk-size");
       const bytesReceived = document.getElementById("bytes-received");
@@ -527,6 +536,18 @@
         bytesReceived.textContent = "";
 
         btnPlay.textContent = isFetch ? "▶ Fetch" : "▶ Play";
+      });
+
+      urlPresets.addEventListener("change", () => {
+        const val = urlPresets.value;
+        if (val) {
+          urlInput.value = val;
+          urlHint.textContent = val.includes("localhost")
+            ? "run: node examples/streaming-server/server.mjs"
+            : "may need CORS — try CLI: curl -sN URL | mdx2md --stream";
+        } else {
+          urlHint.textContent = "streams via fetch";
+        }
       });
 
       // ── Scenarios ──────────────────────────────────────────────
@@ -753,7 +774,16 @@
         let chunkCount = 0;
 
         try {
-          const resp = await fetch(url, { signal: abortController.signal });
+          let resp;
+          try {
+            resp = await fetch(url, { signal: abortController.signal });
+          } catch (fetchErr) {
+            if (fetchErr.name === "AbortError") throw fetchErr;
+            throw new Error(
+              `Failed to fetch — likely CORS blocked.\n` +
+              `Try the CLI instead: curl -sN ${url} | mdx2md --stream`
+            );
+          }
           if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
 
           const reader = resp.body.getReader();
