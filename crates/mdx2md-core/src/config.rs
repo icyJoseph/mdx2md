@@ -129,10 +129,15 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+    }
 
     #[test]
     fn test_parse_kitchen_sink_config() {
-        let toml_str = std::fs::read_to_string("tests/fixtures/kitchen_sink.toml").unwrap();
+        let toml_str = std::fs::read_to_string(fixture_path("kitchen_sink.toml")).unwrap();
         let config = Config::from_toml(&toml_str).unwrap();
 
         assert!(config.options.strip_imports);

@@ -1,0 +1,14 @@
+[options]
+strip_imports = true
+strip_exports = true
+expression_handling = "strip"
+preserve_frontmatter = true
+
+[components.Callout]
+template = "> **{type}**: {children}"
+
+[components.Badge]
+template = "{label}"
+
+[components._default]
+template = "{children}"

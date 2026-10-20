@@ -374,10 +374,14 @@ mod tests {
         assert_eq!(result.trim(), "The answer is {40 + 2}.");
     }
 
+    fn fixture_path(name: &str) -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+    }
+
     #[test]
     fn test_kitchen_sink_layer1() {
-        let input = std::fs::read_to_string("tests/fixtures/kitchen_sink.mdx").unwrap();
-        let toml_str = std::fs::read_to_string("tests/fixtures/kitchen_sink.toml").unwrap();
+        let input = std::fs::read_to_string(fixture_path("kitchen_sink.mdx")).unwrap();
+        let toml_str = std::fs::read_to_string(fixture_path("kitchen_sink.toml")).unwrap();
         let config = Config::from_toml(&toml_str).unwrap();
 
         let result = run_transform(&input, &config);

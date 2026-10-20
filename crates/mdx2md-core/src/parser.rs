@@ -146,6 +146,10 @@ mod tests {
         parse(tokens)
     }
 
+    fn fixture_path(name: &str) -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+    }
+
     #[test]
     fn test_simple_markdown() {
         let doc = parse_str("# Hello\n\nWorld\n").unwrap();
@@ -269,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_kitchen_sink_ast() {
-        let input = std::fs::read_to_string("tests/fixtures/kitchen_sink.mdx").unwrap();
+        let input = std::fs::read_to_string(fixture_path("kitchen_sink.mdx")).unwrap();
         let doc = parse_str(&input).unwrap();
 
         // Should have: Frontmatter, Import, Import, Export, Markdown, JsxElement(Callout), Markdown, Markdown(expression area), Markdown(table), Export
