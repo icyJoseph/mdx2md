@@ -71,7 +71,7 @@ jobs:
 
       - name: Run benchmarks
         run: |
-          cargo bench -p mdx2md-core -- --output-format bencher 2>&1 | tee bench-output.txt
+          cargo bench -p mdx2md-core --bench convert 2>&1 | tee bench-output.txt
 
       - name: Parse benchmark results
         id: bench
@@ -80,26 +80,31 @@ jobs:
             echo 'comment<<BENCH_EOF'
             echo '## 📊 Benchmark Results'
             echo ''
-            echo '| Benchmark | Time |'
-            echo '|-----------|------|'
-            # Extract lines like: test <name> ... bench: <N> ns/iter (+/- <M>)
-            grep 'bench:' bench-output.txt | while read -r line; do
-              name=$(echo "$line" | sed 's/^test \(.*\) \.\.\. bench:.*/\1/' | xargs)
-              ns=$(echo "$line" | sed 's/.*bench: *\([0-9,]*\) ns\/iter.*/\1/')
-              variance=$(echo "$line" | sed 's/.*+\/- \([0-9,]*\)).*/\1/')
-              # Convert ns to human-readable
-              ns_clean=$(echo "$ns" | tr -d ',')
-              if [ "$ns_clean" -ge 1000000 ]; then
-                ms=$(awk "BEGIN {printf \"%.3f\", $ns_clean / 1000000}")
-                time="${ms} ms"
-              elif [ "$ns_clean" -ge 1000 ]; then
-                us=$(awk "BEGIN {printf \"%.2f\", $ns_clean / 1000}")
-                time="${us} µs"
-              else
-                time="${ns} ns"
+            echo '| Benchmark | Low | Median | High |'
+            echo '|-----------|-----|--------|------|'
+            # Criterion output: <name>  time:   [<low> <median> <high>]
+            # The name may be on the previous line if it wraps
+            prev_name=""
+            while IFS= read -r line; do
+              # Check if line is just a benchmark name (wrapped output)
+              if echo "$line" | grep -qE '^\S+\s*$'; then
+                prev_name=$(echo "$line" | xargs)
+                continue
               fi
-              echo "| \`${name}\` | ${time} (± ${variance} ns) |"
-            done
+              if echo "$line" | grep -qE 'time:\s+\['; then
+                if echo "$line" | grep -qE '^\S+\s+time:'; then
+                  name=$(echo "$line" | sed 's/\s*time:.*//' | xargs)
+                else
+                  name="$prev_name"
+                fi
+                times=$(echo "$line" | sed 's/.*\[\(.*\)\]/\1/')
+                low=$(echo "$times" | awk '{print $1, $2}')
+                median=$(echo "$times" | awk '{print $3, $4}')
+                high=$(echo "$times" | awk '{print $5, $6}')
+                echo "| \`${name}\` | ${low} | ${median} | ${high} |"
+              fi
+              prev_name=""
+            done < bench-output.txt
             echo ''
             echo "<details><summary>Raw output</summary>"
             echo ''
