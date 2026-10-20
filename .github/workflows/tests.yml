@@ -69,9 +69,20 @@ jobs:
             ${{ runner.os }}-cargo-bench-
             ${{ runner.os }}-cargo-
 
-      - name: Run benchmarks
+      - name: Run Rust benchmarks
         run: |
           cargo bench -p mdx2md-core --bench convert 2>&1 | tee bench-output.txt
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run mdx-js baseline benchmarks
+        working-directory: benchmarks/mdx-js
+        run: |
+          npm install --ignore-scripts
+          node bench.mjs 2>&1 | tee ../../mdxjs-bench-output.txt
 
       - name: Parse benchmark results
         id: bench
@@ -80,13 +91,14 @@ jobs:
             echo 'comment<<BENCH_EOF'
             echo '## 📊 Benchmark Results'
             echo ''
+            echo '### mdx2md (Rust)'
+            echo ''
             echo '| Benchmark | Low | Median | High |'
             echo '|-----------|-----|--------|------|'
             # Criterion output: <name>  time:   [<low> <median> <high>]
             # The name may be on the previous line if it wraps
             prev_name=""
             while IFS= read -r line; do
-              # Check if line is just a benchmark name (wrapped output)
               if echo "$line" | grep -qE '^\S+\s*$'; then
                 prev_name=$(echo "$line" | xargs)
                 continue
@@ -106,10 +118,27 @@ jobs:
               prev_name=""
             done < bench-output.txt
             echo ''
+            echo '### @mdx-js/mdx + remark (Node.js baseline)'
+            echo ''
+            echo '| Benchmark | Avg |'
+            echo '|-----------|-----|'
+            # mdx-js output: <label>: <N> ms (over <M> iters)
+            grep -E '^[^ ].*: [0-9.]+ ms' mdxjs-bench-output.txt | while IFS= read -r line; do
+              name=$(echo "$line" | sed 's/:.*//')
+              ms=$(echo "$line" | sed 's/.*: \([0-9.]*\) ms.*/\1/')
+              echo "| \`${name}\` | ${ms} ms |"
+            done
+            echo ''
             echo "<details><summary>Raw output</summary>"
             echo ''
+            echo '**Rust (Criterion)**'
             echo '```'
             cat bench-output.txt
+            echo '```'
+            echo ''
+            echo '**Node.js (@mdx-js/mdx)**'
+            echo '```'
+            cat mdxjs-bench-output.txt
             echo '```'
             echo ''
             echo '</details>'
