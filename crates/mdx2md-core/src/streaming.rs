@@ -487,10 +487,9 @@ impl StreamConverter {
 
         let (after, quote) = if let Some(stripped) = rest.strip_prefix(prefix_dq) {
             (stripped, b'"')
-        } else if let Some(stripped) = rest.strip_prefix(prefix_sq) {
-            (stripped, b'\'')
         } else {
-            return None;
+            let stripped = rest.strip_prefix(prefix_sq)?;
+            (stripped, b'\'')
         };
 
         let end = after.find(quote as char)?;

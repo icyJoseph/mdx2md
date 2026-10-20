@@ -119,14 +119,13 @@ fn skip_past_newline(s: &str, offset: usize) -> &str {
 fn find_frontmatter_close(s: &str) -> Option<usize> {
     let mut pos = 0;
     while pos < s.len() {
-        if let Some(idx) = s[pos..].find("---") {
+        {
+            let idx = s[pos..].find("---")?;
             let abs = pos + idx;
             if abs == 0 || s.as_bytes()[abs - 1] == b'\n' {
                 return Some(abs);
             }
             pos = abs + 3;
-        } else {
-            return None;
         }
     }
     None
