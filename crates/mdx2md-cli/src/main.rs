@@ -1,5 +1,5 @@
 use clap::Parser;
-use mdx2md_core::config::Config;
+use mdx2md_core::config::{ComponentTransform, Config};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -27,12 +27,18 @@ struct Cli {
     /// and emit Markdown as Suspense boundaries resolve.
     #[arg(long)]
     stream: bool,
+
+    /// Use built-in HTML → Markdown component templates (h1–h6, p, a, img,
+    /// strong, em, code, pre, ul/ol/li, blockquote, table, etc.).
+    /// Useful for streaming sites without writing a TOML config.
+    #[arg(long)]
+    html: bool,
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    let config = match &cli.config {
+    let mut config = match &cli.config {
         Some(path) => {
             let toml_str = std::fs::read_to_string(path).unwrap_or_else(|e| {
                 eprintln!("Error reading config {}: {e}", path.display());
@@ -45,6 +51,10 @@ fn main() {
         }
         None => Config::default(),
     };
+
+    if cli.html {
+        apply_html_defaults(&mut config);
+    }
 
     if cli.stream {
         stream_stdin(&config, cli.output.as_deref());
@@ -142,6 +152,106 @@ fn stream_stdin(config: &Config, output: Option<&Path>) {
                 std::process::exit(1);
             });
     }
+}
+
+fn apply_html_defaults(config: &mut Config) {
+    let t = |s: &str| ComponentTransform {
+        template: s.to_string(),
+    };
+    let c = &mut config.components;
+
+    // Document structure — unwrap or drop
+    c.entry("html".into()).or_insert_with(|| t("{children}"));
+    c.entry("head".into()).or_insert_with(|| t(""));
+    c.entry("body".into()).or_insert_with(|| t("{children}"));
+    c.entry("meta".into()).or_insert_with(|| t(""));
+    c.entry("title".into()).or_insert_with(|| t(""));
+    c.entry("link".into()).or_insert_with(|| t(""));
+    c.entry("script".into()).or_insert_with(|| t(""));
+    c.entry("style".into()).or_insert_with(|| t(""));
+
+    // Layout — pass through children
+    c.entry("main".into()).or_insert_with(|| t("{children}"));
+    c.entry("article".into()).or_insert_with(|| t("{children}"));
+    c.entry("section".into()).or_insert_with(|| t("{children}"));
+    c.entry("div".into()).or_insert_with(|| t("{children}"));
+    c.entry("span".into()).or_insert_with(|| t("{children}"));
+    c.entry("header".into()).or_insert_with(|| t("{children}"));
+    c.entry("footer".into()).or_insert_with(|| t("{children}"));
+    c.entry("nav".into()).or_insert_with(|| t("{children}"));
+    c.entry("aside".into()).or_insert_with(|| t("{children}"));
+    c.entry("figure".into()).or_insert_with(|| t("{children}"));
+    c.entry("figcaption".into())
+        .or_insert_with(|| t("*{children}*\n"));
+
+    // Headings
+    c.entry("h1".into())
+        .or_insert_with(|| t("# {children}\n"));
+    c.entry("h2".into())
+        .or_insert_with(|| t("## {children}\n"));
+    c.entry("h3".into())
+        .or_insert_with(|| t("### {children}\n"));
+    c.entry("h4".into())
+        .or_insert_with(|| t("#### {children}\n"));
+    c.entry("h5".into())
+        .or_insert_with(|| t("##### {children}\n"));
+    c.entry("h6".into())
+        .or_insert_with(|| t("###### {children}\n"));
+
+    // Block elements
+    c.entry("p".into()).or_insert_with(|| t("{children}\n"));
+    c.entry("blockquote".into())
+        .or_insert_with(|| t("> {children}"));
+    c.entry("pre".into())
+        .or_insert_with(|| t("```\n{children}\n```\n"));
+    c.entry("hr".into()).or_insert_with(|| t("---\n"));
+
+    // Inline elements
+    c.entry("strong".into())
+        .or_insert_with(|| t("**{children}**"));
+    c.entry("b".into())
+        .or_insert_with(|| t("**{children}**"));
+    c.entry("em".into())
+        .or_insert_with(|| t("*{children}*"));
+    c.entry("i".into())
+        .or_insert_with(|| t("*{children}*"));
+    c.entry("code".into())
+        .or_insert_with(|| t("`{children}`"));
+    c.entry("a".into())
+        .or_insert_with(|| t("[{children}]({href})"));
+    c.entry("img".into())
+        .or_insert_with(|| t("![{alt}]({src})"));
+    c.entry("br".into()).or_insert_with(|| t("\n"));
+    c.entry("del".into())
+        .or_insert_with(|| t("~~{children}~~"));
+    c.entry("s".into())
+        .or_insert_with(|| t("~~{children}~~"));
+    c.entry("mark".into())
+        .or_insert_with(|| t("=={children}=="));
+    c.entry("sup".into())
+        .or_insert_with(|| t("^{children}^"));
+    c.entry("sub".into())
+        .or_insert_with(|| t("~{children}~"));
+
+    // Lists
+    c.entry("ul".into()).or_insert_with(|| t("{children}"));
+    c.entry("ol".into()).or_insert_with(|| t("{children}"));
+    c.entry("li".into())
+        .or_insert_with(|| t("- {children}\n"));
+
+    // Tables
+    c.entry("table".into()).or_insert_with(|| t("{children}"));
+    c.entry("thead".into()).or_insert_with(|| t("{children}"));
+    c.entry("tbody".into()).or_insert_with(|| t("{children}"));
+    c.entry("tr".into()).or_insert_with(|| t("{children}"));
+    c.entry("th".into())
+        .or_insert_with(|| t("**{children}** | "));
+    c.entry("td".into())
+        .or_insert_with(|| t("{children} | "));
+
+    // Fallback — pass through unknown tags
+    c.entry("_default".into())
+        .or_insert_with(|| t("{children}"));
 }
 
 fn convert_or_exit(input: &str, config: &Config, source: &str) -> String {
