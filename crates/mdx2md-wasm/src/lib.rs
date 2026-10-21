@@ -1,8 +1,72 @@
 use js_sys::{Array, Function, Object, Reflect};
 use mdx2md_core::config::*;
+use mdx2md_core::streaming::StreamConverter as CoreStreamConverter;
 use mdx2md_core::ComponentResolver;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
+
+/// Streaming HTML → Markdown converter for React SSR with Suspense.
+///
+/// Feed HTML chunks via `push()`, read converted Markdown via `drain()`,
+/// and call `finish()` when the stream ends.
+#[wasm_bindgen]
+pub struct StreamConverter {
+    inner: Option<CoreStreamConverter>,
+}
+
+#[wasm_bindgen]
+impl StreamConverter {
+    /// Create a new streaming converter. Optionally pass a config object
+    /// (same shape as the `convert()` options).
+    #[wasm_bindgen(constructor)]
+    pub fn new(options: JsValue) -> Result<StreamConverter, JsError> {
+        let config = if options.is_undefined() || options.is_null() {
+            Config::default()
+        } else {
+            let (cfg, _) = parse_options(&options).map_err(|e| JsError::new(&e))?;
+            cfg
+        };
+        Ok(StreamConverter {
+            inner: Some(CoreStreamConverter::new(config)),
+        })
+    }
+
+    /// Feed a chunk of HTML into the converter.
+    pub fn push(&mut self, chunk: &str) {
+        if let Some(ref mut inner) = self.inner {
+            inner.push(chunk);
+        }
+    }
+
+    /// Drain any Markdown chunks that are ready.
+    /// Returns an array of objects: `{ content: string, fromBoundary: boolean }`.
+    pub fn drain(&mut self) -> JsValue {
+        let arr = Array::new();
+        if let Some(ref mut inner) = self.inner {
+            for chunk in inner.drain() {
+                let obj = Object::new();
+                Reflect::set(&obj, &"content".into(), &chunk.content.into()).ok();
+                Reflect::set(&obj, &"fromBoundary".into(), &chunk.from_boundary.into()).ok();
+                arr.push(&obj);
+            }
+        }
+        arr.into()
+    }
+
+    /// Finalize the stream. Returns any remaining Markdown (unresolved
+    /// boundaries use their fallback content), or null if nothing remains.
+    pub fn finish(&mut self) -> JsValue {
+        if let Some(inner) = self.inner.take() {
+            if let Some(chunk) = inner.finish() {
+                let obj = Object::new();
+                Reflect::set(&obj, &"content".into(), &chunk.content.into()).ok();
+                Reflect::set(&obj, &"fromBoundary".into(), &chunk.from_boundary.into()).ok();
+                return obj.into();
+            }
+        }
+        JsValue::NULL
+    }
+}
 
 #[wasm_bindgen]
 pub fn convert(mdx: &str, options: JsValue) -> Result<String, JsError> {
@@ -18,8 +82,7 @@ pub fn convert(mdx: &str, options: JsValue) -> Result<String, JsError> {
         let resolver = JsComponentResolver {
             callbacks: js_resolvers,
         };
-        mdx2md_core::convert_with_resolver(mdx, &config, &resolver)
-            .map_err(|e| JsError::new(&e.0))
+        mdx2md_core::convert_with_resolver(mdx, &config, &resolver).map_err(|e| JsError::new(&e.0))
     }
 }
 
@@ -34,11 +97,19 @@ impl ComponentResolver for JsComponentResolver {
         props: &HashMap<String, String>,
         children: &str,
     ) -> Option<String> {
-        let func = self.callbacks.get(tag).or_else(|| self.callbacks.get("_default"))?;
+        let func = self
+            .callbacks
+            .get(tag)
+            .or_else(|| self.callbacks.get("_default"))?;
 
         let js_props = Object::new();
         for (key, value) in props {
-            Reflect::set(&js_props, &JsValue::from_str(key), &JsValue::from_str(value)).ok();
+            Reflect::set(
+                &js_props,
+                &JsValue::from_str(key),
+                &JsValue::from_str(value),
+            )
+            .ok();
         }
         Reflect::set(
             &js_props,
@@ -87,10 +158,9 @@ fn parse_options(options: &JsValue) -> Result<(Config, HashMap<String, Function>
                 let val = Reflect::get(&components_obj, &key).unwrap_or(JsValue::UNDEFINED);
 
                 if let Some(template) = val.as_string() {
-                    config.components.insert(
-                        key_str,
-                        ComponentTransform { template },
-                    );
+                    config
+                        .components
+                        .insert(key_str, ComponentTransform { template });
                 } else if val.is_function() {
                     let func: Function = val.unchecked_into();
                     js_resolvers.insert(key_str, func);

@@ -6,13 +6,19 @@ use std::collections::HashMap;
 /// and returns Some(rendered_string) to handle the component, or None to fall back
 /// to config-based templates.
 pub trait ComponentResolver {
-    fn resolve(&self, tag: &str, props: &HashMap<String, String>, children: &str) -> Option<String>;
+    fn resolve(&self, tag: &str, props: &HashMap<String, String>, children: &str)
+        -> Option<String>;
 }
 
 /// No-op resolver that always falls back to config.
 struct NoResolver;
 impl ComponentResolver for NoResolver {
-    fn resolve(&self, _tag: &str, _props: &HashMap<String, String>, _children: &str) -> Option<String> {
+    fn resolve(
+        &self,
+        _tag: &str,
+        _props: &HashMap<String, String>,
+        _children: &str,
+    ) -> Option<String> {
         None
     }
 }
@@ -24,7 +30,11 @@ pub fn transform(doc: &MdxDocument, config: &Config) -> String {
 }
 
 /// Layer 1 with an external component resolver (used by WASM for JS callbacks).
-pub fn transform_with_resolver(doc: &MdxDocument, config: &Config, resolver: &dyn ComponentResolver) -> String {
+pub fn transform_with_resolver(
+    doc: &MdxDocument,
+    config: &Config,
+    resolver: &dyn ComponentResolver,
+) -> String {
     let mut output = String::new();
 
     for node in &doc.nodes {
@@ -34,7 +44,12 @@ pub fn transform_with_resolver(doc: &MdxDocument, config: &Config, resolver: &dy
     clean_blank_lines(&output)
 }
 
-fn transform_node(node: &MdxNode, config: &Config, resolver: &dyn ComponentResolver, out: &mut String) {
+fn transform_node(
+    node: &MdxNode,
+    config: &Config,
+    resolver: &dyn ComponentResolver,
+    out: &mut String,
+) {
     match node {
         MdxNode::Frontmatter(content) => {
             if config.options.preserve_frontmatter {
@@ -117,7 +132,11 @@ fn transform_node(node: &MdxNode, config: &Config, resolver: &dyn ComponentResol
     }
 }
 
-fn transform_children(children: &[MdxNode], config: &Config, resolver: &dyn ComponentResolver) -> String {
+fn transform_children(
+    children: &[MdxNode],
+    config: &Config,
+    resolver: &dyn ComponentResolver,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     for child in children {
         let mut buf = String::new();
@@ -375,7 +394,10 @@ mod tests {
     }
 
     fn fixture_path(name: &str) -> std::path::PathBuf {
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join(name)
     }
 
     #[test]
@@ -389,12 +411,24 @@ mod tests {
         // Layer 1 checks: imports/exports stripped, JSX resolved
         assert!(!result.contains("import "), "imports should be stripped");
         assert!(!result.contains("export "), "exports should be stripped");
-        assert!(result.contains("---\ntitle: Kitchen Sink"), "frontmatter preserved");
+        assert!(
+            result.contains("---\ntitle: Kitchen Sink"),
+            "frontmatter preserved"
+        );
         assert!(result.contains("> **warning**"), "Callout transformed");
-        assert!(result.contains("fn main() {}"), "CodeBlock content preserved");
+        assert!(
+            result.contains("fn main() {}"),
+            "CodeBlock content preserved"
+        );
         // Table should still be raw at this point (Layer 2 handles it)
-        assert!(result.contains("| Feature"), "Table still raw after Layer 1");
+        assert!(
+            result.contains("| Feature"),
+            "Table still raw after Layer 1"
+        );
         // Links should still be relative (Layer 2 handles it)
-        assert!(result.contains("/docs/getting-started"), "Links still relative after Layer 1");
+        assert!(
+            result.contains("/docs/getting-started"),
+            "Links still relative after Layer 1"
+        );
     }
 }

@@ -1,5 +1,5 @@
 use clap::Parser;
-use mdx2md_core::config::Config;
+use mdx2md_core::config::{ComponentTransform, Config};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -22,12 +22,23 @@ struct Cli {
     /// File extension for output files in directory mode (default: "md").
     #[arg(long, default_value = "md")]
     ext: String,
+
+    /// Stream mode: read chunked HTML from stdin (e.g. React SSR with Suspense)
+    /// and emit Markdown as Suspense boundaries resolve.
+    #[arg(long)]
+    stream: bool,
+
+    /// Use built-in HTML → Markdown component templates (h1–h6, p, a, img,
+    /// strong, em, code, pre, ul/ol/li, blockquote, table, etc.).
+    /// Useful for streaming sites without writing a TOML config.
+    #[arg(long)]
+    html: bool,
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    let config = match &cli.config {
+    let mut config = match &cli.config {
         Some(path) => {
             let toml_str = std::fs::read_to_string(path).unwrap_or_else(|e| {
                 eprintln!("Error reading config {}: {e}", path.display());
@@ -40,6 +51,15 @@ fn main() {
         }
         None => Config::default(),
     };
+
+    if cli.html {
+        apply_html_defaults(&mut config);
+    }
+
+    if cli.stream {
+        stream_stdin(&config, cli.output.as_deref());
+        return;
+    }
 
     if cli.input.is_empty() {
         // Stdin mode
@@ -73,13 +93,8 @@ fn main() {
             for file in &files {
                 let input = read_file(file);
                 let result = convert_or_exit(&input, &config, &file.display().to_string());
-                let out_name = file
-                    .file_stem()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string()
-                    + "."
-                    + &cli.ext;
+                let out_name =
+                    file.file_stem().unwrap().to_string_lossy().to_string() + "." + &cli.ext;
                 let out_path = out_dir.join(out_name);
                 std::fs::write(&out_path, &result).unwrap_or_else(|e| {
                     eprintln!("Error writing {}: {e}", out_path.display());
@@ -89,6 +104,142 @@ fn main() {
             }
         }
     }
+}
+
+fn stream_stdin(config: &Config, output: Option<&Path>) {
+    use mdx2md_core::streaming::StreamConverter;
+
+    let mut converter = StreamConverter::new(config.clone());
+    let mut stdin = io::stdin().lock();
+    let mut buf = [0u8; 8192];
+
+    let mut out: Box<dyn Write> = match output {
+        Some(path) => {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            Box::new(std::fs::File::create(path).unwrap_or_else(|e| {
+                eprintln!("Error creating {}: {e}", path.display());
+                std::process::exit(1);
+            }))
+        }
+        None => Box::new(io::stdout()),
+    };
+
+    loop {
+        let n = stdin.read(&mut buf).unwrap_or_else(|e| {
+            eprintln!("Error reading stdin: {e}");
+            std::process::exit(1);
+        });
+        if n == 0 {
+            break;
+        }
+        let chunk = String::from_utf8_lossy(&buf[..n]);
+        converter.push(&chunk);
+        for md in converter.drain() {
+            out.write_all(md.content.as_bytes()).unwrap_or_else(|e| {
+                eprintln!("Error writing: {e}");
+                std::process::exit(1);
+            });
+            out.flush().ok();
+        }
+    }
+
+    if let Some(final_chunk) = converter.finish() {
+        out.write_all(final_chunk.content.as_bytes())
+            .unwrap_or_else(|e| {
+                eprintln!("Error writing: {e}");
+                std::process::exit(1);
+            });
+    }
+}
+
+fn apply_html_defaults(config: &mut Config) {
+    let t = |s: &str| ComponentTransform {
+        template: s.to_string(),
+    };
+    let c = &mut config.components;
+
+    // Document structure — unwrap or drop
+    c.entry("html".into()).or_insert_with(|| t("{children}"));
+    c.entry("head".into()).or_insert_with(|| t(""));
+    c.entry("body".into()).or_insert_with(|| t("{children}"));
+    c.entry("meta".into()).or_insert_with(|| t(""));
+    c.entry("title".into()).or_insert_with(|| t(""));
+    c.entry("link".into()).or_insert_with(|| t(""));
+    c.entry("script".into()).or_insert_with(|| t(""));
+    c.entry("style".into()).or_insert_with(|| t(""));
+
+    // Layout — pass through children
+    c.entry("main".into()).or_insert_with(|| t("{children}"));
+    c.entry("article".into()).or_insert_with(|| t("{children}"));
+    c.entry("section".into()).or_insert_with(|| t("{children}"));
+    c.entry("div".into()).or_insert_with(|| t("{children}"));
+    c.entry("span".into()).or_insert_with(|| t("{children}"));
+    c.entry("header".into()).or_insert_with(|| t("{children}"));
+    c.entry("footer".into()).or_insert_with(|| t("{children}"));
+    c.entry("nav".into()).or_insert_with(|| t("{children}"));
+    c.entry("aside".into()).or_insert_with(|| t("{children}"));
+    c.entry("figure".into()).or_insert_with(|| t("{children}"));
+    c.entry("figcaption".into())
+        .or_insert_with(|| t("*{children}*\n"));
+
+    // Headings
+    c.entry("h1".into()).or_insert_with(|| t("# {children}\n"));
+    c.entry("h2".into()).or_insert_with(|| t("## {children}\n"));
+    c.entry("h3".into())
+        .or_insert_with(|| t("### {children}\n"));
+    c.entry("h4".into())
+        .or_insert_with(|| t("#### {children}\n"));
+    c.entry("h5".into())
+        .or_insert_with(|| t("##### {children}\n"));
+    c.entry("h6".into())
+        .or_insert_with(|| t("###### {children}\n"));
+
+    // Block elements
+    c.entry("p".into()).or_insert_with(|| t("{children}\n"));
+    c.entry("blockquote".into())
+        .or_insert_with(|| t("> {children}"));
+    c.entry("pre".into())
+        .or_insert_with(|| t("```\n{children}\n```\n"));
+    c.entry("hr".into()).or_insert_with(|| t("---\n"));
+
+    // Inline elements
+    c.entry("strong".into())
+        .or_insert_with(|| t("**{children}**"));
+    c.entry("b".into()).or_insert_with(|| t("**{children}**"));
+    c.entry("em".into()).or_insert_with(|| t("*{children}*"));
+    c.entry("i".into()).or_insert_with(|| t("*{children}*"));
+    c.entry("code".into()).or_insert_with(|| t("`{children}`"));
+    c.entry("a".into())
+        .or_insert_with(|| t("[{children}]({href})"));
+    c.entry("img".into())
+        .or_insert_with(|| t("![{alt}]({src})"));
+    c.entry("br".into()).or_insert_with(|| t("\n"));
+    c.entry("del".into()).or_insert_with(|| t("~~{children}~~"));
+    c.entry("s".into()).or_insert_with(|| t("~~{children}~~"));
+    c.entry("mark".into())
+        .or_insert_with(|| t("=={children}=="));
+    c.entry("sup".into()).or_insert_with(|| t("^{children}^"));
+    c.entry("sub".into()).or_insert_with(|| t("~{children}~"));
+
+    // Lists
+    c.entry("ul".into()).or_insert_with(|| t("{children}"));
+    c.entry("ol".into()).or_insert_with(|| t("{children}"));
+    c.entry("li".into()).or_insert_with(|| t("- {children}\n"));
+
+    // Tables
+    c.entry("table".into()).or_insert_with(|| t("{children}"));
+    c.entry("thead".into()).or_insert_with(|| t("{children}"));
+    c.entry("tbody".into()).or_insert_with(|| t("{children}"));
+    c.entry("tr".into()).or_insert_with(|| t("{children}"));
+    c.entry("th".into())
+        .or_insert_with(|| t("**{children}** | "));
+    c.entry("td".into()).or_insert_with(|| t("{children} | "));
+
+    // Fallback — pass through unknown tags
+    c.entry("_default".into())
+        .or_insert_with(|| t("{children}"));
 }
 
 fn convert_or_exit(input: &str, config: &Config, source: &str) -> String {
@@ -117,10 +268,12 @@ fn write_output(content: &str, output: Option<&Path>) {
             });
         }
         None => {
-            io::stdout().write_all(content.as_bytes()).unwrap_or_else(|e| {
-                eprintln!("Error writing stdout: {e}");
-                std::process::exit(1);
-            });
+            io::stdout()
+                .write_all(content.as_bytes())
+                .unwrap_or_else(|e| {
+                    eprintln!("Error writing stdout: {e}");
+                    std::process::exit(1);
+                });
         }
     }
 }

@@ -2,6 +2,7 @@ pub mod ast;
 pub mod config;
 pub mod parser;
 pub mod rewriter;
+pub mod streaming;
 pub mod tokenizer;
 pub mod transform;
 
@@ -47,7 +48,10 @@ mod integration_tests {
     use std::path::PathBuf;
 
     fn fixture_path(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("fixtures")
+            .join(name)
     }
 
     #[test]
@@ -119,16 +123,40 @@ mod integration_tests {
         }
 
         // Verify specific sanitization guarantees
-        assert!(!result.contains("evil.example"), "Should strip evil domain imports");
-        assert!(!result.contains("phishing.example"), "Should strip phishing links");
-        assert!(!result.contains("malicious.example"), "Should strip hidden context");
-        assert!(!result.contains("tracker.evil"), "Should strip tracking images");
-        assert!(!result.contains("javascript:"), "Should strip javascript: URIs");
+        assert!(
+            !result.contains("evil.example"),
+            "Should strip evil domain imports"
+        );
+        assert!(
+            !result.contains("phishing.example"),
+            "Should strip phishing links"
+        );
+        assert!(
+            !result.contains("malicious.example"),
+            "Should strip hidden context"
+        );
+        assert!(
+            !result.contains("tracker.evil"),
+            "Should strip tracking images"
+        );
+        assert!(
+            !result.contains("javascript:"),
+            "Should strip javascript: URIs"
+        );
         assert!(!result.contains("SECRET_KEY"), "Should strip expressions");
         assert!(!result.contains("<!--"), "Should strip HTML comments");
-        assert!(!result.contains("Ignore all previous"), "Should strip prompt injections");
-        assert!(result.contains("https://docs.example.com/setup"), "Should keep allowed links");
-        assert!(result.contains("/docs/quickstart"), "Should keep relative links");
+        assert!(
+            !result.contains("Ignore all previous"),
+            "Should strip prompt injections"
+        );
+        assert!(
+            result.contains("https://docs.example.com/setup"),
+            "Should keep allowed links"
+        );
+        assert!(
+            result.contains("/docs/quickstart"),
+            "Should keep relative links"
+        );
     }
 
     /// All fixtures that have .mdx + .toml + .md (expected). Run full pipeline and assert output matches.
@@ -144,16 +172,16 @@ mod integration_tests {
     #[test]
     fn test_full_pipeline_all_fixtures() {
         for name in FIXTURE_NAMES {
-            let input =
-                std::fs::read_to_string(fixture_path(&format!("{name}.mdx"))).unwrap_or_else(|e| {
+            let input = std::fs::read_to_string(fixture_path(&format!("{name}.mdx")))
+                .unwrap_or_else(|e| {
                     panic!("fixture {name}.mdx: {e}");
                 });
-            let toml_str =
-                std::fs::read_to_string(fixture_path(&format!("{name}.toml"))).unwrap_or_else(|e| {
+            let toml_str = std::fs::read_to_string(fixture_path(&format!("{name}.toml")))
+                .unwrap_or_else(|e| {
                     panic!("fixture {name}.toml: {e}");
                 });
-            let expected =
-                std::fs::read_to_string(fixture_path(&format!("{name}.md"))).unwrap_or_else(|e| {
+            let expected = std::fs::read_to_string(fixture_path(&format!("{name}.md")))
+                .unwrap_or_else(|e| {
                     panic!("fixture {name}.md: {e}");
                 });
             let config = Config::from_toml(&toml_str).unwrap();
@@ -161,8 +189,7 @@ mod integration_tests {
             let result_lines = normalize(&result);
             let expected_lines = normalize(&expected);
             assert_eq!(
-                result_lines,
-                expected_lines,
+                result_lines, expected_lines,
                 "fixture {name}: output does not match expected"
             );
         }
@@ -198,9 +225,21 @@ template = "{children}"
 "##;
         let config = Config::from_toml(toml_config).unwrap();
         let result = convert(input, &config).unwrap();
-        assert!(result.contains("# Hello"), "Expected '# Hello', got: {}", result);
-        assert!(result.contains("**bold**"), "Expected '**bold**', got: {}", result);
-        assert!(result.contains("*italic*"), "Expected '*italic*', got: {}", result);
+        assert!(
+            result.contains("# Hello"),
+            "Expected '# Hello', got: {}",
+            result
+        );
+        assert!(
+            result.contains("**bold**"),
+            "Expected '**bold**', got: {}",
+            result
+        );
+        assert!(
+            result.contains("*italic*"),
+            "Expected '*italic*', got: {}",
+            result
+        );
     }
 
     fn normalize(s: &str) -> Vec<String> {

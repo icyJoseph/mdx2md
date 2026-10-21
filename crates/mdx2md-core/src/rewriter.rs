@@ -59,12 +59,22 @@ fn rewrite_links_and_images(input: &str, config: &Config) -> String {
                             }
                         } else if let Some(cfg) = link_cfg {
                             if cfg.strip {
-                                replacements.push((element_start, element_end, link_text.to_string()));
+                                replacements.push((
+                                    element_start,
+                                    element_end,
+                                    link_text.to_string(),
+                                ));
                                 i = paren_end + 1;
                                 continue;
                             }
-                            if !cfg.allowed_domains.is_empty() && !domain_allowed(&url, &cfg.allowed_domains) {
-                                replacements.push((element_start, element_end, link_text.to_string()));
+                            if !cfg.allowed_domains.is_empty()
+                                && !domain_allowed(&url, &cfg.allowed_domains)
+                            {
+                                replacements.push((
+                                    element_start,
+                                    element_end,
+                                    link_text.to_string(),
+                                ));
                                 i = paren_end + 1;
                                 continue;
                             }
@@ -99,7 +109,9 @@ fn rewrite_links_and_images(input: &str, config: &Config) -> String {
 fn domain_allowed(url: &str, allowed: &[String]) -> bool {
     if url.starts_with("//") || url.contains("://") {
         let host = extract_host(url);
-        return allowed.iter().any(|d| host == *d || host.ends_with(&format!(".{d}")));
+        return allowed
+            .iter()
+            .any(|d| host == *d || host.ends_with(&format!(".{d}")));
     }
     // Reject non-http schemes like javascript:, data:, vbscript:
     if let Some(colon_pos) = url.find(':') {
@@ -115,8 +127,8 @@ fn domain_allowed(url: &str, allowed: &[String]) -> bool {
 fn extract_host(url: &str) -> String {
     let without_scheme = if let Some(idx) = url.find("://") {
         &url[idx + 3..]
-    } else if url.starts_with("//") {
-        &url[2..]
+    } else if let Some(stripped) = url.strip_prefix("//") {
+        stripped
     } else {
         url
     };
@@ -126,7 +138,11 @@ fn extract_host(url: &str) -> String {
         without_scheme
     };
     let without_port_and_path = without_auth.split('/').next().unwrap_or("");
-    without_port_and_path.split(':').next().unwrap_or("").to_lowercase()
+    without_port_and_path
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_lowercase()
 }
 
 /// Remove `<!DOCTYPE ...>` lines from the input (case-insensitive).
@@ -138,7 +154,11 @@ fn strip_doctype(input: &str, config: &Config) -> String {
     let mut result = String::with_capacity(input.len());
     let mut rest = input;
     while rest.len() >= PAT.len() {
-        if let Some(start) = rest.as_bytes().windows(PAT.len()).position(|w| w.eq_ignore_ascii_case(PAT)) {
+        if let Some(start) = rest
+            .as_bytes()
+            .windows(PAT.len())
+            .position(|w| w.eq_ignore_ascii_case(PAT))
+        {
             result.push_str(&rest[..start]);
             let after_doctype = &rest[start..];
             if let Some(end_in_line) = after_doctype.find('>') {
@@ -256,7 +276,10 @@ fn parse_link_destination(inner: &str) -> (String, Option<String>) {
 }
 
 fn needs_absolutize(url: &str) -> bool {
-    !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("//") && !url.starts_with('#')
+    !url.starts_with("http://")
+        && !url.starts_with("https://")
+        && !url.starts_with("//")
+        && !url.starts_with('#')
 }
 
 fn make_absolute(base_url: &str, url: &str) -> String {
@@ -400,10 +423,19 @@ mod tests {
         let config = config_with_tables();
         let result = rewrite_markdown(input, &config);
 
-        assert!(result.contains("**Name**: Alice"), "Should have Name: Alice, got:\n{result}");
-        assert!(result.contains("**Role**: Engineer"), "Should have Role: Engineer");
+        assert!(
+            result.contains("**Name**: Alice"),
+            "Should have Name: Alice, got:\n{result}"
+        );
+        assert!(
+            result.contains("**Role**: Engineer"),
+            "Should have Role: Engineer"
+        );
         assert!(result.contains("**Name**: Bob"), "Should have Name: Bob");
-        assert!(result.contains("**Role**: Designer"), "Should have Role: Designer");
+        assert!(
+            result.contains("**Role**: Designer"),
+            "Should have Role: Designer"
+        );
         assert!(!result.contains("|"), "Should not contain table pipes");
     }
 
@@ -435,7 +467,10 @@ mod tests {
         let input = "See [Google](https://google.com) here.\n";
         let config = config_with_links();
         let result = rewrite_markdown(input, &config);
-        assert!(result.contains("https://google.com"), "Should not modify absolute URLs");
+        assert!(
+            result.contains("https://google.com"),
+            "Should not modify absolute URLs"
+        );
     }
 
     #[test]
@@ -501,8 +536,14 @@ See [docs](/guide) and ![img](/pic.png).
             ..Default::default()
         };
         let result = rewrite_markdown(input, &config);
-        assert!(result.contains("https://example.com/guide"), "Links absolute");
-        assert!(result.contains("https://cdn.example.com/pic.png"), "Images absolute");
+        assert!(
+            result.contains("https://example.com/guide"),
+            "Links absolute"
+        );
+        assert!(
+            result.contains("https://cdn.example.com/pic.png"),
+            "Images absolute"
+        );
         assert!(result.contains("**A**: 1"), "Table to list");
         assert!(!result.contains("|"), "No table pipes");
     }
@@ -688,7 +729,10 @@ See [docs](/guide) and ![img](/pic.png).
         let input = "text <!-- comment --> more\n";
         let config = Config::default();
         let result = rewrite_markdown(input, &config);
-        assert!(result.contains("<!-- comment -->"), "Should preserve comments when disabled");
+        assert!(
+            result.contains("<!-- comment -->"),
+            "Should preserve comments when disabled"
+        );
     }
 
     // --- strip_doctype tests ---
@@ -730,7 +774,10 @@ See [docs](/guide) and ![img](/pic.png).
     #[test]
     fn test_extract_host_basic() {
         assert_eq!(extract_host("https://example.com/path"), "example.com");
-        assert_eq!(extract_host("http://sub.example.com:8080/foo"), "sub.example.com");
+        assert_eq!(
+            extract_host("http://sub.example.com:8080/foo"),
+            "sub.example.com"
+        );
         assert_eq!(extract_host("//cdn.example.com/img.png"), "cdn.example.com");
     }
 
@@ -741,16 +788,25 @@ See [docs](/guide) and ![img](/pic.png).
 
     #[test]
     fn test_domain_allowed_exact() {
-        assert!(domain_allowed("https://example.com/foo", &[String::from("example.com")]));
+        assert!(domain_allowed(
+            "https://example.com/foo",
+            &[String::from("example.com")]
+        ));
     }
 
     #[test]
     fn test_domain_allowed_subdomain() {
-        assert!(domain_allowed("https://api.example.com/v1", &[String::from("example.com")]));
+        assert!(domain_allowed(
+            "https://api.example.com/v1",
+            &[String::from("example.com")]
+        ));
     }
 
     #[test]
     fn test_domain_not_allowed() {
-        assert!(!domain_allowed("https://evil.com/payload", &[String::from("example.com")]));
+        assert!(!domain_allowed(
+            "https://evil.com/payload",
+            &[String::from("example.com")]
+        ));
     }
 }

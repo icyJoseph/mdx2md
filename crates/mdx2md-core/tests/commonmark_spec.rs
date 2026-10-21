@@ -4,7 +4,7 @@
 //! Full identity (output == input) is not asserted: Layer 2 may normalize backslash escapes
 //! or whitespace. The authoritative check is "no crash and parse/convert succeeds."
 
-use mdx2md_core::{convert, config::Config};
+use mdx2md_core::{config::Config, convert};
 use std::path::PathBuf;
 
 /// Matches content that looks like an HTML/JSX tag or autolink (e.g. `<div`, `</p`, `<!`, `<http`)
@@ -24,7 +24,9 @@ fn contains_html_like(s: &str) -> bool {
 }
 
 fn spec_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("commonmark_spec.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("commonmark_spec.json")
 }
 
 #[test]
@@ -71,7 +73,10 @@ struct SpecExample {
 #[ignore] // Run with --ignored when checking identity; some examples differ (e.g. backslash escapes)
 fn commonmark_spec_passthrough_identity() {
     fn normalize(s: &str) -> String {
-        s.lines().map(|l| l.trim_end()).collect::<Vec<_>>().join("\n")
+        s.lines()
+            .map(|l| l.trim_end())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
     let json = std::fs::read_to_string(spec_path()).expect("commonmark_spec.json not found");
     let examples: Vec<SpecExample> = serde_json::from_str(&json).expect("invalid spec.json");
@@ -80,6 +85,12 @@ fn commonmark_spec_passthrough_identity() {
         let result = convert(&ex.markdown, &config).expect("convert should not error");
         let expected = normalize(&ex.markdown);
         let actual = normalize(&result);
-        assert_eq!(actual, expected, "example {} (section {:?})", i + 1, ex.section);
+        assert_eq!(
+            actual,
+            expected,
+            "example {} (section {:?})",
+            i + 1,
+            ex.section
+        );
     }
 }

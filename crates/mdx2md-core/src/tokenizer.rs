@@ -119,14 +119,13 @@ fn skip_past_newline(s: &str, offset: usize) -> &str {
 fn find_frontmatter_close(s: &str) -> Option<usize> {
     let mut pos = 0;
     while pos < s.len() {
-        if let Some(idx) = s[pos..].find("---") {
+        {
+            let idx = s[pos..].find("---")?;
             let abs = pos + idx;
             if abs == 0 || s.as_bytes()[abs - 1] == b'\n' {
                 return Some(abs);
             }
             pos = abs + 3;
-        } else {
-            return None;
         }
     }
     None
@@ -141,15 +140,20 @@ fn try_parse_import_export(s: &str) -> Option<(Token, &str)> {
     }
 
     // Peek ahead to see if this looks like a JS import/export (not an HTML tag or MD)
-    let keyword_len = if is_import { 7 } else { 7 };
-    let rest_after_keyword = &s[keyword_len..];
+    // Both "import " and "export " are 7 bytes
+    let rest_after_keyword = &s[7..];
 
     // `export default` is also an export
     // For imports: `import X from`, `import { X } from`, `import "x"`
     // For exports: `export const`, `export default`, `export function`, `export {`
     if is_import {
         let first_char = rest_after_keyword.chars().next()?;
-        if !first_char.is_alphabetic() && first_char != '{' && first_char != '*' && first_char != '"' && first_char != '\'' {
+        if !first_char.is_alphabetic()
+            && first_char != '{'
+            && first_char != '*'
+            && first_char != '"'
+            && first_char != '\''
+        {
             return None;
         }
     } else {
@@ -181,8 +185,12 @@ fn try_parse_import_export(s: &str) -> Option<(Token, &str)> {
                     if depth == 0 {
                         // Check if next non-whitespace is a newline or semicolon
                         let after = &s[i + 1..];
-                        let trimmed = after.trim_start_matches(|c: char| c == ' ' || c == '\t');
-                        if trimmed.starts_with('\n') || trimmed.starts_with('\r') || trimmed.starts_with(';') || trimmed.is_empty() {
+                        let trimmed = after.trim_start_matches([' ', '\t']);
+                        if trimmed.starts_with('\n')
+                            || trimmed.starts_with('\r')
+                            || trimmed.starts_with(';')
+                            || trimmed.is_empty()
+                        {
                             let end = if trimmed.starts_with(';') {
                                 s.len() - trimmed.len() + 1
                             } else {
@@ -240,10 +248,10 @@ fn try_parse_import_export(s: &str) -> Option<(Token, &str)> {
 }
 
 fn consume_newline(s: &str) -> &str {
-    if s.starts_with("\r\n") {
-        &s[2..]
-    } else if s.starts_with('\n') {
-        &s[1..]
+    if let Some(rest) = s.strip_prefix("\r\n") {
+        rest
+    } else if let Some(rest) = s.strip_prefix('\n') {
+        rest
     } else {
         s
     }
@@ -276,10 +284,17 @@ fn try_parse_jsx_tag(s: &str) -> Option<(Token, &str)> {
     }
 
     let tag_start = pos;
-    while pos < bytes.len() && (bytes[pos].is_ascii_alphanumeric() || bytes[pos] == b'_' || bytes[pos] == b'.' || bytes[pos] == b'-') {
+    while pos < bytes.len()
+        && (bytes[pos].is_ascii_alphanumeric()
+            || bytes[pos] == b'_'
+            || bytes[pos] == b'.'
+            || bytes[pos] == b'-')
+    {
         pos += 1;
     }
-    let tag_name = std::str::from_utf8(&bytes[tag_start..pos]).ok()?.to_string();
+    let tag_name = std::str::from_utf8(&bytes[tag_start..pos])
+        .ok()?
+        .to_string();
 
     if is_closing {
         // Expect `>`
@@ -296,7 +311,12 @@ fn try_parse_jsx_tag(s: &str) -> Option<(Token, &str)> {
     let mut attributes = Vec::new();
     loop {
         // Skip whitespace
-        while pos < bytes.len() && (bytes[pos] == b' ' || bytes[pos] == b'\t' || bytes[pos] == b'\n' || bytes[pos] == b'\r') {
+        while pos < bytes.len()
+            && (bytes[pos] == b' '
+                || bytes[pos] == b'\t'
+                || bytes[pos] == b'\n'
+                || bytes[pos] == b'\r')
+        {
             pos += 1;
         }
 
@@ -331,10 +351,14 @@ fn try_parse_jsx_tag(s: &str) -> Option<(Token, &str)> {
             return None;
         }
         let attr_start = pos;
-        while pos < bytes.len() && (bytes[pos].is_ascii_alphanumeric() || bytes[pos] == b'_' || bytes[pos] == b'-') {
+        while pos < bytes.len()
+            && (bytes[pos].is_ascii_alphanumeric() || bytes[pos] == b'_' || bytes[pos] == b'-')
+        {
             pos += 1;
         }
-        let attr_name = std::str::from_utf8(&bytes[attr_start..pos]).ok()?.to_string();
+        let attr_name = std::str::from_utf8(&bytes[attr_start..pos])
+            .ok()?
+            .to_string();
 
         // Check for `=`
         if pos < bytes.len() && bytes[pos] == b'=' {
@@ -356,7 +380,9 @@ fn try_parse_jsx_tag(s: &str) -> Option<(Token, &str)> {
                 if pos >= bytes.len() {
                     return None;
                 }
-                let val = std::str::from_utf8(&bytes[val_start..pos]).ok()?.to_string();
+                let val = std::str::from_utf8(&bytes[val_start..pos])
+                    .ok()?
+                    .to_string();
                 pos += 1; // skip closing quote
                 attributes.push(RawAttribute {
                     name: attr_name,
@@ -437,7 +463,10 @@ mod tests {
     fn test_frontmatter() {
         let input = "---\ntitle: Hello\nauthor: Test\n---\n\n# Content\n";
         let tokens = tokenize(input).unwrap();
-        assert_eq!(tokens[0], Token::Frontmatter("title: Hello\nauthor: Test".to_string()));
+        assert_eq!(
+            tokens[0],
+            Token::Frontmatter("title: Hello\nauthor: Test".to_string())
+        );
         assert!(matches!(&tokens[1], Token::Markdown(s) if s.contains("# Content")));
     }
 
@@ -445,7 +474,10 @@ mod tests {
     fn test_import() {
         let input = "import { Callout } from './components';\n\n# Hello\n";
         let tokens = tokenize(input).unwrap();
-        assert_eq!(tokens[0], Token::Import("import { Callout } from './components';".to_string()));
+        assert_eq!(
+            tokens[0],
+            Token::Import("import { Callout } from './components';".to_string())
+        );
         assert!(matches!(&tokens[1], Token::Markdown(_)));
     }
 
@@ -453,7 +485,10 @@ mod tests {
     fn test_export() {
         let input = "export const meta = { draft: true };\n\n# Hello\n";
         let tokens = tokenize(input).unwrap();
-        assert_eq!(tokens[0], Token::Export("export const meta = { draft: true };".to_string()));
+        assert_eq!(
+            tokens[0],
+            Token::Export("export const meta = { draft: true };".to_string())
+        );
     }
 
     #[test]
@@ -484,7 +519,9 @@ mod tests {
     fn test_jsx_open_close() {
         let input = r#"<Callout type="warning">content</Callout>"#;
         let tokens = tokenize(input).unwrap();
-        assert!(matches!(&tokens[0], Token::JsxOpenTag { tag, self_closing: false, .. } if tag == "Callout"));
+        assert!(
+            matches!(&tokens[0], Token::JsxOpenTag { tag, self_closing: false, .. } if tag == "Callout")
+        );
         assert!(matches!(&tokens[1], Token::Markdown(s) if s == "content"));
         assert!(matches!(&tokens[2], Token::JsxCloseTag { tag } if tag == "Callout"));
     }
@@ -520,7 +557,10 @@ mod tests {
     fn test_nested_braces_in_expression() {
         let input = "{obj.map(x => { return x; })}";
         let tokens = tokenize(input).unwrap();
-        assert_eq!(tokens[0], Token::Expression("obj.map(x => { return x; })".to_string()));
+        assert_eq!(
+            tokens[0],
+            Token::Expression("obj.map(x => { return x; })".to_string())
+        );
     }
 
     #[test]
@@ -535,7 +575,9 @@ mod tests {
     fn test_lowercase_tags_are_jsx() {
         let input = "<div>hello</div>";
         let tokens = tokenize(input).unwrap();
-        assert!(matches!(&tokens[0], Token::JsxOpenTag { tag, self_closing: false, .. } if tag == "div"));
+        assert!(
+            matches!(&tokens[0], Token::JsxOpenTag { tag, self_closing: false, .. } if tag == "div")
+        );
         assert!(matches!(&tokens[1], Token::Markdown(s) if s == "hello"));
         assert!(matches!(&tokens[2], Token::JsxCloseTag { tag } if tag == "div"));
     }
@@ -558,8 +600,10 @@ mod tests {
     fn test_html_tag_with_attributes() {
         let input = r#"<a href="https://example.com">link</a>"#;
         let tokens = tokenize(input).unwrap();
-        assert!(matches!(&tokens[0], Token::JsxOpenTag { tag, attributes, self_closing: false }
-            if tag == "a" && attributes.len() == 1 && attributes[0].name == "href"));
+        assert!(
+            matches!(&tokens[0], Token::JsxOpenTag { tag, attributes, self_closing: false }
+            if tag == "a" && attributes.len() == 1 && attributes[0].name == "href")
+        );
         assert!(matches!(&tokens[1], Token::Markdown(s) if s == "link"));
         assert!(matches!(&tokens[2], Token::JsxCloseTag { tag } if tag == "a"));
     }
@@ -654,7 +698,10 @@ export default function Layout({ children }) {
 
         // Verify key token types are present
         assert!(types.contains(&"Frontmatter"), "Should have frontmatter");
-        assert!(types.iter().filter(|&&t| t == "Import").count() == 2, "Should have 2 imports");
+        assert!(
+            types.iter().filter(|&&t| t == "Import").count() == 2,
+            "Should have 2 imports"
+        );
         assert!(types.contains(&"Export"), "Should have export");
         assert!(types.contains(&"JsxOpen"), "Should have JSX open tags");
         assert!(types.contains(&"JsxClose"), "Should have JSX close tags");

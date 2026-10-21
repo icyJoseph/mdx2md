@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <title>mdx2md · Streaming Demo</title>
+    <meta
+      name="description"
+      content="Watch chunked HTML stream into Markdown in real-time. React Suspense, static HTML, and LLM token scenarios."
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0d1117;
+        --bg-surface: #161b22;
+        --bg-input: #0d1117;
+        --border: #30363d;
+        --text: #e6edf3;
+        --text-muted: #8b949e;
+        --accent: #f0883e;
+        --accent-blue: #58a6ff;
+        --accent-green: #3fb950;
+        --accent-purple: #a371f7;
+        --error: #f85149;
+        --font-mono:
+          "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+        --font-sans:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+          sans-serif;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        font-family: var(--font-sans);
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-shrink: 0;
+      }
+
+      header h1 {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      header h1 span {
+        color: var(--accent);
+        font-weight: 400;
+      }
+
+      .nav-link {
+        font-size: 12px;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+
+      .nav-link:hover {
+        color: var(--text);
+        text-decoration: underline;
+      }
+
+      .github-link {
+        color: var(--text-muted);
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        transition: color 0.15s;
+      }
+
+      .github-link:hover {
+        color: var(--text);
+      }
+
+      #status {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-left: auto;
+      }
+
+      #status.ready {
+        color: var(--accent-green);
+      }
+
+      #status.error {
+        color: var(--error);
+      }
+
+      .toolbar {
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-surface);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+      }
+
+      .toolbar label {
+        font-size: 12px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .toolbar select,
+      .toolbar input[type="range"] {
+        font-size: 12px;
+        font-family: var(--font-sans);
+        background: var(--bg-input);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 4px 8px;
+        outline: none;
+      }
+
+      .toolbar select:focus,
+      .toolbar input:focus {
+        border-color: var(--accent);
+      }
+
+      .toolbar input[type="range"] {
+        width: 100px;
+        padding: 0;
+        border: none;
+        accent-color: var(--accent);
+      }
+
+      .btn {
+        font-size: 12px;
+        font-family: var(--font-sans);
+        font-weight: 600;
+        padding: 5px 14px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+
+      .btn-play {
+        background: var(--accent-green);
+        color: #0d1117;
+        border-color: var(--accent-green);
+      }
+
+      .btn-play:hover {
+        filter: brightness(1.1);
+      }
+
+      .btn-play:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-stop {
+        background: var(--error);
+        color: #fff;
+        border-color: var(--error);
+      }
+
+      .btn-reset {
+        background: transparent;
+        color: var(--text-muted);
+      }
+
+      .btn-reset:hover {
+        color: var(--text);
+        border-color: var(--text-muted);
+      }
+
+      .speed-val {
+        font-size: 11px;
+        color: var(--text-muted);
+        min-width: 36px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .panes {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        min-height: 0;
+      }
+
+      .pane {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-right: 1px solid var(--border);
+      }
+
+      .pane:last-child {
+        border-right: none;
+      }
+
+      .pane-header {
+        padding: 8px 16px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .pane-header .chunk-counter {
+        font-weight: 400;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .pane-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 16px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .chunk-block {
+        margin-bottom: 4px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        animation: chunk-in 0.2s ease-out;
+      }
+
+      @keyframes chunk-in {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .chunk-block.static-chunk {
+        background: #161b2280;
+        border-left: 3px solid var(--border);
+      }
+
+      .chunk-block.boundary-chunk {
+        background: #3fb95015;
+        border-left: 3px solid var(--accent-green);
+      }
+
+      .chunk-block.script-chunk {
+        background: #a371f715;
+        border-left: 3px solid var(--accent-purple);
+        color: var(--text-muted);
+      }
+
+      .chunk-block.marker-chunk {
+        background: #f0883e15;
+        border-left: 3px solid var(--accent);
+        color: var(--accent);
+      }
+
+      .output-md {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        color: var(--text);
+      }
+
+      .output-md .md-piece {
+        animation: chunk-in 0.15s ease-out;
+      }
+
+      .output-md .md-piece.from-boundary {
+        color: var(--accent-green);
+      }
+
+      .empty-state {
+        color: var(--text-muted);
+        font-family: var(--font-sans);
+        font-size: 13px;
+      }
+
+      .progress-bar {
+        height: 2px;
+        background: var(--border);
+        flex-shrink: 0;
+      }
+
+      .progress-bar .progress-fill {
+        height: 100%;
+        background: var(--accent);
+        transition: width 0.15s;
+        width: 0%;
+      }
+
+      .url-bar {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 200px;
+      }
+
+      .url-bar.visible {
+        display: flex;
+      }
+
+      .url-bar input[type="text"] {
+        flex: 1;
+        font-size: 12px;
+        font-family: var(--font-mono);
+        background: var(--bg-input);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 5px 10px;
+        outline: none;
+      }
+
+      .url-bar input[type="text"]:focus {
+        border-color: var(--accent);
+      }
+
+      .url-bar input[type="text"]::placeholder {
+        color: var(--text-muted);
+      }
+
+      .url-bar .url-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+
+      .chunk-size-label {
+        display: none;
+      }
+
+      .chunk-size-label.visible {
+        display: flex;
+      }
+
+      .bytes-received {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      @media (max-width: 768px) {
+        .panes {
+          grid-template-columns: 1fr;
+          grid-template-rows: 1fr 1fr;
+        }
+        .pane {
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>mdx2md <span>stream</span></h1>
+      <a class="nav-link" href="./index.html">playground</a>
+      <a class="nav-link" href="./html-md.html">html &rarr; md</a>
+      <a class="nav-link" href="./sanitize.html">sanitize</a>
+      <a class="nav-link" href="./stream.html" style="color: var(--text)">stream</a>
+      <a
+        class="github-link"
+        href="https://github.com/icyjoseph/mdx2md"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="View on GitHub"
+      >
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+          <path
+            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+          />
+        </svg>
+      </a>
+      <span id="status">Loading WASM...</span>
+    </header>
+
+    <div class="toolbar">
+      <label>
+        Scenario
+        <select id="scenario">
+          <option value="react-suspense">React SSR Suspense</option>
+          <option value="react-nested">Nested Suspense (out-of-order)</option>
+          <option value="static-chunked">Static HTML (chunked)</option>
+          <option value="llm-tokens">LLM token stream (preview)</option>
+          <option value="fetch-url">Fetch URL</option>
+          <option value="paste-html">Paste HTML</option>
+        </select>
+      </label>
+
+      <div class="url-bar" id="url-bar">
+        <select id="url-presets" style="font-size: 12px; background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px;">
+          <option value="">Custom URL…</option>
+          <option value="http://localhost:3001">localhost:3001 (test server)</option>
+          <option value="https://nextjs.org">nextjs.org</option>
+          <option value="https://react.dev">react.dev</option>
+          <option value="https://vercel.com">vercel.com</option>
+        </select>
+        <input type="text" id="url-input" placeholder="https://example.com" spellcheck="false" />
+        <span class="url-hint" id="url-hint">streams via fetch</span>
+      </div>
+
+      <label id="speed-label">
+        Speed
+        <input type="range" id="speed" min="10" max="500" value="120" step="10" />
+        <span class="speed-val" id="speed-val">120ms</span>
+      </label>
+
+      <label class="chunk-size-label" id="chunk-size-label">
+        Chunk
+        <select id="chunk-size">
+          <option value="256">256 B</option>
+          <option value="1024">1 KB</option>
+          <option value="4096" selected>4 KB</option>
+          <option value="8192">8 KB</option>
+          <option value="0">Network chunks</option>
+        </select>
+      </label>
+
+      <button class="btn btn-play" id="btn-play">&#9654; Play</button>
+      <button class="btn btn-stop" id="btn-stop" style="display: none">&#9632; Stop</button>
+      <button class="btn btn-reset" id="btn-reset">Reset</button>
+      <span class="bytes-received" id="bytes-received"></span>
+    </div>
+
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+
+    <div class="panes">
+      <div class="pane">
+        <div class="pane-header">
+          HTML Chunks
+          <span class="chunk-counter" id="chunk-counter">0 / 0</span>
+        </div>
+        <div class="pane-body" id="chunks-pane">
+          <div class="empty-state">Select a scenario and press Play</div>
+        </div>
+        <div class="pane-body" id="paste-pane" style="display: none">
+          <textarea
+            id="paste-input"
+            spellcheck="false"
+            placeholder="Paste HTML here, then press Play to simulate streaming it chunk by chunk..."
+            style="flex: 1; width: 100%; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; background: var(--bg-input); color: var(--text); border: none; resize: none; outline: none; tab-size: 2;"
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-header">
+          Markdown Output
+          <span class="chunk-counter" id="md-counter">0 pieces</span>
+        </div>
+        <div class="pane-body">
+          <div class="output-md" id="md-output">
+            <span class="empty-state">Waiting for chunks...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import init, { StreamConverter } from "./mdx2md_wasm.js";
+
+      const statusEl = document.getElementById("status");
+      const scenarioEl = document.getElementById("scenario");
+      const speedEl = document.getElementById("speed");
+      const speedValEl = document.getElementById("speed-val");
+      const speedLabel = document.getElementById("speed-label");
+      const btnPlay = document.getElementById("btn-play");
+      const btnStop = document.getElementById("btn-stop");
+      const btnReset = document.getElementById("btn-reset");
+      const progressEl = document.getElementById("progress");
+      const chunksPane = document.getElementById("chunks-pane");
+      const pastePane = document.getElementById("paste-pane");
+      const pasteInput = document.getElementById("paste-input");
+      const mdOutput = document.getElementById("md-output");
+      const chunkCounter = document.getElementById("chunk-counter");
+      const mdCounter = document.getElementById("md-counter");
+      const urlBar = document.getElementById("url-bar");
+      const urlInput = document.getElementById("url-input");
+      const urlPresets = document.getElementById("url-presets");
+      const urlHint = document.getElementById("url-hint");
+      const chunkSizeLabel = document.getElementById("chunk-size-label");
+      const chunkSizeEl = document.getElementById("chunk-size");
+      const bytesReceived = document.getElementById("bytes-received");
+
+      // ── Scenario mode switching ────────────────────────────────
+
+      scenarioEl.addEventListener("change", () => {
+        const mode = scenarioEl.value;
+        const isFetch = mode === "fetch-url";
+        const isPaste = mode === "paste-html";
+        const isPreset = !isFetch && !isPaste;
+
+        urlBar.classList.toggle("visible", isFetch);
+        chunkSizeLabel.classList.toggle("visible", isFetch || isPaste);
+        speedLabel.style.display = isPreset ? "" : "none";
+        chunksPane.style.display = isPaste ? "none" : "";
+        pastePane.style.display = isPaste ? "" : "none";
+        bytesReceived.textContent = "";
+
+        btnPlay.textContent = isFetch ? "▶ Fetch" : "▶ Play";
+      });
+
+      urlPresets.addEventListener("change", () => {
+        const val = urlPresets.value;
+        if (val) {
+          urlInput.value = val;
+          urlHint.textContent = val.includes("localhost")
+            ? "run: node examples/streaming-server/server.mjs"
+            : "may need CORS — try CLI: curl -sN URL | mdx2md --stream";
+        } else {
+          urlHint.textContent = "streams via fetch";
+        }
+      });
+
+      // ── Scenarios ──────────────────────────────────────────────
+
+      const HTML_CONFIG = {
+        components: {
+          html: "{children}", head: "", body: "{children}",
+          meta: "", title: "", link: "", script: "", style: "",
+          main: "{children}", article: "{children}", section: "{children}",
+          div: "{children}", span: "{children}",
+          header: "{children}", footer: "{children}", nav: "{children}",
+          h1: "# {children}\n", h2: "## {children}\n", h3: "### {children}\n",
+          p: "{children}\n", blockquote: "> {children}",
+          pre: "\x60\x60\x60\n{children}\n\x60\x60\x60\n", hr: "---\n",
+          strong: "**{children}**", b: "**{children}**",
+          em: "*{children}*", i: "*{children}*",
+          code: "\x60{children}\x60",
+          a: "[{children}]({href})", img: "![{alt}]({src})",
+          ul: "{children}", ol: "{children}", li: "- {children}\n",
+          _default: "{children}",
+        },
+      };
+
+      const SCENARIOS = {
+        "react-suspense": {
+          description: "React SSR with a single Suspense boundary that resolves after the shell",
+          chunks: [
+            // Initial shell with suspense fallback
+            `<main><h1>Dashboard</h1><p>Welcome back!</p>`,
+            `<!--$?--><template id="B:0"></template><p>Loading data...</p><!--/$-->`,
+            `<footer><p>© 2026 App</p></footer></main>`,
+            // Boundary resolves
+            `<div hidden id="S:0"><h2>Your Stats</h2><ul><li>Projects: <strong>12</strong></li><li>Stars: <strong>340</strong></li><li>PRs merged: <strong>89</strong></li></ul></div>`,
+            `<script>$RC("B:0","S:0")</script>`,
+          ],
+        },
+
+        "react-nested": {
+          description: "Nested Suspense boundaries resolving out of order (inner first)",
+          chunks: [
+            // Shell
+            `<main><h1>Blog Post</h1>`,
+            `<article><p>This is the <strong>main content</strong> of the article.</p>`,
+            // Outer boundary (comments section)
+            `<!--$?--><template id="B:0"></template><p>Loading comments...</p>`,
+            // Inner boundary (nested inside comments — user avatars)
+            `<!--$?--><template id="B:1"></template><p>Loading avatars...</p><!--/$-->`,
+            `<!--/$-->`,
+            `</article></main>`,
+            // Inner resolves first (out of order!)
+            `<div hidden id="S:1"><p><em>Avatar for Alice</em></p><p><em>Avatar for Bob</em></p></div>`,
+            `<script>$RC("B:1","S:1")</script>`,
+            // Now outer resolves
+            `<div hidden id="S:0"><h2>Comments</h2><p><strong>Alice:</strong> Great post!</p><p><strong>Bob:</strong> Thanks for sharing.</p></div>`,
+            `<script>$RC("B:0","S:0")</script>`,
+          ],
+        },
+
+        "static-chunked": {
+          description: "Plain HTML arriving in chunks (no Suspense)",
+          chunks: [
+            `<main>`,
+            `<h1>Getting Started Guide</h1>`,
+            `<p>This guide walks you through <strong>setting up</strong> the project.</p>`,
+            `<h2>Prerequisites</h2>`,
+            `<ul><li>Rust 1.70+</li>`,
+            `<li>Node.js 18+ <em>(optional, for benchmarks)</em></li>`,
+            `<li>A terminal</li></ul>`,
+            `<h2>Installation</h2>`,
+            `<pre><code>cargo install mdx2md</code></pre>`,
+            `<blockquote><p>Tip: use <code>--locked</code> for reproducible builds.</p></blockquote>`,
+            `<h2>Usage</h2>`,
+            `<p>Run <code>mdx2md input.mdx -o output.md</code> to convert a file.</p>`,
+            `<p>See the <a href="https://github.com/icyjoseph/mdx2md">repo</a> for more.</p>`,
+            `</main>`,
+          ],
+        },
+
+        "llm-tokens": {
+          description: "LLM-style token stream — text arriving mid-syntax (preview of TextStreamConverter)",
+          chunks: [
+            `<p>`,
+            `Here is `,
+            `a paragraph `,
+            `with `,
+            `<strong>`,
+            `bold`,
+            `</strong>`,
+            ` text `,
+            `and `,
+            `<em>`,
+            `italic`,
+            `</em>`,
+            ` words.</p>`,
+            `<h2>`,
+            `Code `,
+            `Example`,
+            `</h2>`,
+            `<pre><code>`,
+            `fn main() {\n`,
+            `    println!("`,
+            `hello",`,
+            `);\n`,
+            `}`,
+            `</code></pre>`,
+            `<p>`,
+            `Check out `,
+            `<a href="https://example.com">`,
+            `this link`,
+            `</a>`,
+            ` for more info.</p>`,
+          ],
+        },
+      };
+
+      // ── State ──────────────────────────────────────────────────
+
+      let running = false;
+      let abortController = null;
+      let wasmReady = false;
+
+      // ── Speed slider ───────────────────────────────────────────
+
+      speedEl.addEventListener("input", () => {
+        speedValEl.textContent = speedEl.value + "ms";
+      });
+
+      // ── Classify chunks for visual display ─────────────────────
+
+      function classifyChunk(text) {
+        if (text.includes("$RC(") || text.includes("<script>")) return "script-chunk";
+        if (text.includes("<!--$?-->") || text.includes("<!--/$-->") || text.includes("<template")) return "marker-chunk";
+        if (text.includes('hidden id="S:')) return "boundary-chunk";
+        return "static-chunk";
+      }
+
+      // ── Playback ───────────────────────────────────────────────
+
+      function sleep(ms, signal) {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(resolve, ms);
+          if (signal) {
+            signal.addEventListener("abort", () => {
+              clearTimeout(timer);
+              reject(new DOMException("Aborted", "AbortError"));
+            }, { once: true });
+          }
+        });
+      }
+
+      function startRun() {
+        running = true;
+        abortController = new AbortController();
+        btnPlay.style.display = "none";
+        btnStop.style.display = "";
+        btnPlay.disabled = true;
+      }
+
+      function endRun() {
+        running = false;
+        btnPlay.style.display = "";
+        btnStop.style.display = "none";
+        btnPlay.disabled = false;
+      }
+
+      async function play() {
+        const mode = scenarioEl.value;
+        if (mode === "fetch-url") return playFetch();
+        if (mode === "paste-html") return playPaste();
+        return playPreset();
+      }
+
+      // ── Preset scenario playback ──────────────────────────────
+
+      async function playPreset() {
+        const key = scenarioEl.value;
+        const scenario = SCENARIOS[key];
+        if (!scenario) return;
+
+        reset();
+        startRun();
+
+        const chunks = scenario.chunks;
+        const converter = new StreamConverter(HTML_CONFIG);
+        let mdPieces = 0;
+
+        chunkCounter.textContent = `0 / ${chunks.length}`;
+
+        try {
+          for (let i = 0; i < chunks.length; i++) {
+            await sleep(parseInt(speedEl.value), abortController.signal);
+
+            const chunk = chunks[i];
+            addChunkBlock(chunk);
+
+            chunkCounter.textContent = `${i + 1} / ${chunks.length}`;
+            progressEl.style.width = `${((i + 1) / chunks.length) * 100}%`;
+
+            converter.push(chunk);
+            mdPieces = drainAndAppend(converter, mdPieces);
+          }
+
+          mdPieces = finishAndAppend(converter, mdPieces);
+        } catch (e) {
+          if (e.name !== "AbortError") throw e;
+        } finally {
+          endRun();
+        }
+      }
+
+      // ── Fetch URL streaming ────────────────────────────────────
+
+      async function playFetch() {
+        const url = urlInput.value.trim();
+        if (!url) { urlInput.focus(); return; }
+
+        reset();
+        startRun();
+
+        const chunkSize = parseInt(chunkSizeEl.value);
+        const converter = new StreamConverter(HTML_CONFIG);
+        let mdPieces = 0;
+        let totalBytes = 0;
+        let chunkCount = 0;
+
+        try {
+          let resp;
+          try {
+            resp = await fetch(url, { signal: abortController.signal });
+          } catch (fetchErr) {
+            if (fetchErr.name === "AbortError") throw fetchErr;
+            throw new Error(
+              `Failed to fetch — likely CORS blocked.\n` +
+              `Try the CLI instead: curl -sN ${url} | mdx2md --stream`
+            );
+          }
+          if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+
+          const reader = resp.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value, { stream: true });
+            totalBytes += value.byteLength;
+
+            if (chunkSize === 0) {
+              // Use network chunks as-is
+              chunkCount++;
+              addChunkBlock(text);
+              chunkCounter.textContent = `${chunkCount} chunks`;
+              bytesReceived.textContent = formatBytes(totalBytes);
+
+              converter.push(text);
+              mdPieces = drainAndAppend(converter, mdPieces);
+            } else {
+              // Re-chunk to fixed size for visibility
+              buffer += text;
+              while (buffer.length >= chunkSize) {
+                const piece = buffer.slice(0, chunkSize);
+                buffer = buffer.slice(chunkSize);
+                chunkCount++;
+                addChunkBlock(piece);
+                chunkCounter.textContent = `${chunkCount} chunks`;
+                bytesReceived.textContent = formatBytes(totalBytes);
+
+                converter.push(piece);
+                mdPieces = drainAndAppend(converter, mdPieces);
+
+                // Yield to keep UI responsive
+                await sleep(1, abortController.signal);
+              }
+            }
+          }
+
+          // Flush remaining buffer
+          if (buffer.length > 0) {
+            chunkCount++;
+            addChunkBlock(buffer);
+            chunkCounter.textContent = `${chunkCount} chunks`;
+            converter.push(buffer);
+            mdPieces = drainAndAppend(converter, mdPieces);
+          }
+
+          bytesReceived.textContent = formatBytes(totalBytes) + " (done)";
+          progressEl.style.width = "100%";
+          mdPieces = finishAndAppend(converter, mdPieces);
+        } catch (e) {
+          if (e.name === "AbortError") return;
+          const el = document.createElement("div");
+          el.className = "chunk-block marker-chunk";
+          el.textContent = `Error: ${e.message}`;
+          chunksPane.appendChild(el);
+        } finally {
+          endRun();
+        }
+      }
+
+      // ── Paste HTML playback ────────────────────────────────────
+
+      async function playPaste() {
+        const html = pasteInput.value;
+        if (!html.trim()) { pasteInput.focus(); return; }
+
+        // Switch to chunk view for output
+        chunksPane.style.display = "";
+        pastePane.style.display = "none";
+        chunksPane.innerHTML = "";
+        mdOutput.innerHTML = '<span class="empty-state">Waiting for chunks...</span>';
+        chunkCounter.textContent = "0 / 0";
+        mdCounter.textContent = "0 pieces";
+        progressEl.style.width = "0%";
+
+        startRun();
+
+        const chunkSize = parseInt(chunkSizeEl.value) || 4096;
+        const converter = new StreamConverter(HTML_CONFIG);
+        let mdPieces = 0;
+
+        // Split into chunks
+        const chunks = [];
+        for (let i = 0; i < html.length; i += chunkSize) {
+          chunks.push(html.slice(i, i + chunkSize));
+        }
+
+        chunkCounter.textContent = `0 / ${chunks.length}`;
+
+        try {
+          for (let i = 0; i < chunks.length; i++) {
+            await sleep(30, abortController.signal);
+
+            addChunkBlock(chunks[i]);
+            chunkCounter.textContent = `${i + 1} / ${chunks.length}`;
+            progressEl.style.width = `${((i + 1) / chunks.length) * 100}%`;
+
+            converter.push(chunks[i]);
+            mdPieces = drainAndAppend(converter, mdPieces);
+          }
+
+          mdPieces = finishAndAppend(converter, mdPieces);
+        } catch (e) {
+          if (e.name !== "AbortError") throw e;
+        } finally {
+          endRun();
+        }
+      }
+
+      // ── Shared helpers ─────────────────────────────────────────
+
+      function addChunkBlock(text) {
+        const empty = chunksPane.querySelector(".empty-state");
+        if (empty) empty.remove();
+
+        const el = document.createElement("div");
+        el.className = `chunk-block ${classifyChunk(text)}`;
+        el.textContent = text.length > 2000
+          ? text.slice(0, 2000) + `\n… (${text.length} chars total)`
+          : text;
+        chunksPane.appendChild(el);
+        el.scrollIntoView({ behavior: "smooth", block: "end" });
+      }
+
+      function drainAndAppend(converter, mdPieces) {
+        const drained = converter.drain();
+        for (const piece of drained) {
+          if (piece.content.trim()) {
+            appendMd(piece.content, piece.fromBoundary);
+            mdPieces++;
+          }
+        }
+        mdCounter.textContent = `${mdPieces} piece${mdPieces !== 1 ? "s" : ""}`;
+        return mdPieces;
+      }
+
+      function finishAndAppend(converter, mdPieces) {
+        const final_ = converter.finish();
+        if (final_ && final_.content && final_.content.trim()) {
+          appendMd(final_.content, final_.fromBoundary);
+          mdPieces++;
+          mdCounter.textContent = `${mdPieces} piece${mdPieces !== 1 ? "s" : ""}`;
+        }
+        return mdPieces;
+      }
+
+      function formatBytes(b) {
+        if (b < 1024) return b + " B";
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+        return (b / (1024 * 1024)).toFixed(2) + " MB";
+      }
+
+      function appendMd(content, fromBoundary) {
+        // Remove the empty state message on first output
+        const empty = mdOutput.querySelector(".empty-state");
+        if (empty) empty.remove();
+
+        const span = document.createElement("span");
+        span.className = `md-piece${fromBoundary ? " from-boundary" : ""}`;
+        span.textContent = content;
+        mdOutput.appendChild(span);
+        span.scrollIntoView({ behavior: "smooth", block: "end" });
+      }
+
+      function stop() {
+        if (abortController) abortController.abort();
+      }
+
+      function reset() {
+        stop();
+        const mode = scenarioEl.value;
+        const isPaste = mode === "paste-html";
+
+        chunksPane.innerHTML = '<div class="empty-state">Select a scenario and press Play</div>';
+        chunksPane.style.display = isPaste ? "none" : "";
+        pastePane.style.display = isPaste ? "" : "none";
+        mdOutput.innerHTML = '<span class="empty-state">Waiting for chunks...</span>';
+        chunkCounter.textContent = "0 / 0";
+        mdCounter.textContent = "0 pieces";
+        progressEl.style.width = "0%";
+        bytesReceived.textContent = "";
+      }
+
+      // ── Wire up buttons ────────────────────────────────────────
+
+      btnPlay.addEventListener("click", play);
+      btnStop.addEventListener("click", stop);
+      btnReset.addEventListener("click", reset);
+
+      // ── Init WASM ──────────────────────────────────────────────
+
+      try {
+        await init();
+        wasmReady = true;
+        statusEl.textContent = "Ready";
+        statusEl.className = "ready";
+        btnPlay.disabled = false;
+      } catch (e) {
+        statusEl.textContent = "Failed to load WASM";
+        statusEl.className = "error";
+        btnPlay.disabled = true;
+        console.error(e);
+      }
+    </script>
+  </body>
+</html>
