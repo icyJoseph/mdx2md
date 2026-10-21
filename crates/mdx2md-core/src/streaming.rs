@@ -127,10 +127,8 @@ impl StreamConverter {
         let boundary_ids: Vec<String> = self.boundaries.keys().cloned().collect();
         for id in &boundary_ids {
             if self.boundaries[id].resolved_content.is_none() {
-                if let (Some(start), Some(end)) = (
-                    Some(self.boundaries[id].fallback_start),
-                    self.boundaries[id].fallback_end,
-                ) {
+                if let Some(end) = self.boundaries[id].fallback_end {
+                    let start = self.boundaries[id].fallback_start;
                     let fallback = self.buffer[start..end].to_string();
                     self.boundaries.get_mut(id).unwrap().resolved_content = Some(fallback);
                 }
@@ -290,7 +288,12 @@ impl StreamConverter {
                 }
 
                 _ => {
-                    self.scan_pos = abs + 1;
+                    // Advance by one UTF-8 character to avoid landing inside multi-byte chars
+                    self.scan_pos = abs
+                        + self.buffer[abs..]
+                            .chars()
+                            .next()
+                            .map_or(1, |c| c.len_utf8());
                 }
             }
         }

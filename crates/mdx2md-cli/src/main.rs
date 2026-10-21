@@ -110,7 +110,7 @@ fn stream_stdin(config: &Config, output: Option<&Path>) {
     use mdx2md_core::streaming::StreamConverter;
 
     let mut converter = StreamConverter::new(config.clone());
-    let stdin = io::stdin();
+    let mut stdin = io::stdin().lock();
     let mut buf = [0u8; 8192];
 
     let mut out: Box<dyn Write> = match output {
@@ -127,7 +127,7 @@ fn stream_stdin(config: &Config, output: Option<&Path>) {
     };
 
     loop {
-        let n = stdin.lock().read(&mut buf).unwrap_or_else(|e| {
+        let n = stdin.read(&mut buf).unwrap_or_else(|e| {
             eprintln!("Error reading stdin: {e}");
             std::process::exit(1);
         });
