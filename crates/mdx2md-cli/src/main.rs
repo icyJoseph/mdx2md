@@ -185,10 +185,8 @@ fn apply_html_defaults(config: &mut Config) {
         .or_insert_with(|| t("*{children}*\n"));
 
     // Headings
-    c.entry("h1".into())
-        .or_insert_with(|| t("# {children}\n"));
-    c.entry("h2".into())
-        .or_insert_with(|| t("## {children}\n"));
+    c.entry("h1".into()).or_insert_with(|| t("# {children}\n"));
+    c.entry("h2".into()).or_insert_with(|| t("## {children}\n"));
     c.entry("h3".into())
         .or_insert_with(|| t("### {children}\n"));
     c.entry("h4".into())
@@ -209,35 +207,26 @@ fn apply_html_defaults(config: &mut Config) {
     // Inline elements
     c.entry("strong".into())
         .or_insert_with(|| t("**{children}**"));
-    c.entry("b".into())
-        .or_insert_with(|| t("**{children}**"));
-    c.entry("em".into())
-        .or_insert_with(|| t("*{children}*"));
-    c.entry("i".into())
-        .or_insert_with(|| t("*{children}*"));
-    c.entry("code".into())
-        .or_insert_with(|| t("`{children}`"));
+    c.entry("b".into()).or_insert_with(|| t("**{children}**"));
+    c.entry("em".into()).or_insert_with(|| t("*{children}*"));
+    c.entry("i".into()).or_insert_with(|| t("*{children}*"));
+    c.entry("code".into()).or_insert_with(|| t("`{children}`"));
     c.entry("a".into())
         .or_insert_with(|| t("[{children}]({href})"));
     c.entry("img".into())
         .or_insert_with(|| t("![{alt}]({src})"));
     c.entry("br".into()).or_insert_with(|| t("\n"));
-    c.entry("del".into())
-        .or_insert_with(|| t("~~{children}~~"));
-    c.entry("s".into())
-        .or_insert_with(|| t("~~{children}~~"));
+    c.entry("del".into()).or_insert_with(|| t("~~{children}~~"));
+    c.entry("s".into()).or_insert_with(|| t("~~{children}~~"));
     c.entry("mark".into())
         .or_insert_with(|| t("=={children}=="));
-    c.entry("sup".into())
-        .or_insert_with(|| t("^{children}^"));
-    c.entry("sub".into())
-        .or_insert_with(|| t("~{children}~"));
+    c.entry("sup".into()).or_insert_with(|| t("^{children}^"));
+    c.entry("sub".into()).or_insert_with(|| t("~{children}~"));
 
     // Lists
     c.entry("ul".into()).or_insert_with(|| t("{children}"));
     c.entry("ol".into()).or_insert_with(|| t("{children}"));
-    c.entry("li".into())
-        .or_insert_with(|| t("- {children}\n"));
+    c.entry("li".into()).or_insert_with(|| t("- {children}\n"));
 
     // Tables
     c.entry("table".into()).or_insert_with(|| t("{children}"));
@@ -246,8 +235,7 @@ fn apply_html_defaults(config: &mut Config) {
     c.entry("tr".into()).or_insert_with(|| t("{children}"));
     c.entry("th".into())
         .or_insert_with(|| t("**{children}** | "));
-    c.entry("td".into())
-        .or_insert_with(|| t("{children} | "));
+    c.entry("td".into()).or_insert_with(|| t("{children} | "));
 
     // Fallback — pass through unknown tags
     c.entry("_default".into())
